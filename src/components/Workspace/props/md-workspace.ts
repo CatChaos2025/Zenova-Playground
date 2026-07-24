@@ -1,15 +1,15 @@
 import type React from "react";
 import { createContext, useContext, type ReactNode } from "react";
 
-export type BarPosition = 'left' | 'right' | 'top' | 'bottom';
+export type BarPosition = 'left' | 'right';
 
 export interface WorkspaceProps {
     id?: number;
-    menuBar?: ReactNode;
-    contextBar?: ReactNode;
-    children?: ReactNode;
-    menuPosition?: BarPosition;
-    onPositionChange?: (newPos: BarPosition) => void;
+    contextualMenu?: ReactNode; // Menú superior (arriba de todo)
+    dockBar?: ReactNode;        // Barra lateral de iconos
+    children?: ReactNode;       // Contenido central / Wallpaper 3D
+    dockPosition?: BarPosition;
+    onDockPositionChange?: (newPos: BarPosition) => void;
     background?: React.CSSProperties['backgroundColor'];
     color?: React.CSSProperties['color'];
 }
@@ -19,13 +19,13 @@ export function componentId(min: number, max: number): number {
 }
 
 interface WorkspaceContextType {
-    position: BarPosition;
-    setPosition: (pos: BarPosition) => void;
+    dockPosition: BarPosition;
+    setDockPosition: (pos: BarPosition) => void;
 }
 
 export const WorkspaceContext = createContext<WorkspaceContextType>({
-    position: 'left',
-    setPosition: () => {}
+    dockPosition: 'left',
+    setDockPosition: () => {}
 });
 
 export const useWorkspace = () => useContext(WorkspaceContext);

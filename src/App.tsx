@@ -1,19 +1,19 @@
-import React from 'react';
-import "./assets/img/backoc.png";
-import "./App.css";
-import "./themes.css"
+import React, { useState } from 'react';
+import { Workspace } from './components/Workspace/md-workspace';
+import { useWorkspace, type BarPosition } from './components/Workspace/props/md-workspace';
+import "./App.css"
 
-export const App: React.FC = () => {
+export function App() {
+  const [dockPos, setDockPos] = useState<BarPosition>('left');
+
   return (
-    <div className="screen">
-      {/* Barra superior de notificaciones/fecha */}
-      <div className="datebar"></div>
-      
-      {/* Contenedor central (Menú + Contenido) */}
-      <div className="contentlayout">
-        <div className="menubar"></div>
-        <div className="content"></div> 
-      </div>
-    </div>
+    <Workspace 
+      background="#141218"
+      color="#e6e1e5"
+      dockPosition={dockPos}
+      onDockPositionChange={(newPos) => setDockPos(newPos)}
+    ></Workspace>
   );
-};
+}
+
+export default App;

@@ -1,0 +1,25 @@
+.content-workspace{
+    display: flex;
+    flex: 1;
+    width: 100%;
+    height: 100%;
+}
+
+.content-workspace .workspace-bar{
+    order: 1;
+}
+
+.content-workspace .workspace-view{
+    order: 2;
+    flex: 1;
+}
+
+.content-workspace.position-right .workspace-bar,
+.content-workspace.position-bottom .workspace-bar{
+    order: 2;
+}
+
+.content-workspace.position-right .workspace-view,
+.content-workspace.position-bottom .workspace-view{
+    order: 1;
+}
