@@ -1,2 +1,10 @@
-# Zenova-Playground
-Proyecto Universitario, distribuidora de videojuegos hechos en Godot con React y Typescript
+# Zenova
+
+Juego web creado con React + TypeScript + Vite.
+
+## Desarrollo
+
+```bash
+pnpm install
+pnpm dev
+```
