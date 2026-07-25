@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Workspace } from './components/Workspace/md-workspace';
-import { useWorkspace, type BarPosition } from './components/Workspace/props/md-workspace';
+import {type BarPosition } from './components/Workspace/props/md-workspace';
 import "./App.css"
 
 export function App() {
