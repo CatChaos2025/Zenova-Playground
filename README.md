@@ -25,4 +25,4 @@ Este proyecto está construido con herramientas modernas para garantizar un rend
 
 1. Clona este repositorio:
    ```bash
-   git clone [https://github.com/tu-usuario/tu-repo.git](https://github.com/tu-usuario/tu-repo.git)
+   git clone [https://github.com/CatChaos2025/Zenova-Playground)
