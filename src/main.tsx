@@ -1,9 +1,15 @@
-import { StrictMode } from 'react'
-import { createRoot } from 'react-dom/client'
-import { App } from './App.tsx'
+import React from "react";
+import ReactDOM from "react-dom/client";
+import { App } from "./App";
+import { TestWorkspace } from "./test/test-wokspace";
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <App />
-  </StrictMode>,
-)
+// Imprime en consola qué valor está leyendo Vite
+console.log("Modo actual:", import.meta.env.VITE_APP_MODE);
+
+const isTestMode = import.meta.env.VITE_APP_MODE === "test";
+
+ReactDOM.createRoot(document.getElementById("root")!).render(
+  <React.StrictMode>
+    {isTestMode ? <TestWorkspace /> : <App />}
+  </React.StrictMode>
+);

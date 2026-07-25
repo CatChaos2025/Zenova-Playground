@@ -1,81 +1,84 @@
-import React, { Component, type ReactNode } from "react";
-import { type WorkspaceProps, componentId, type BarPosition, WorkspaceContext } from "./props/md-workspace";
+import { Component, type ReactNode } from "react";
+import { 
+    componentId, 
+    WorkspaceContext, 
+    type BarPosition, 
+    type WorkspaceProps 
+} from "./props/md-workspace";
+import "./md-workspace.css";
 
-export class Workspace extends Component<WorkspaceProps> {
-    state = {
-        id: this.props.id ?? componentId(100, 4040),
-        dockPosition: this.props.dockPosition ?? 'left'
-    };
+interface WorkspaceState {
+    id: number;
+    menuPosition: BarPosition;
+}
 
-    componentDidUpdate(prevProps: WorkspaceProps) {
-        if (prevProps.dockPosition !== this.props.dockPosition && this.props.dockPosition) {
-            this.setState({ dockPosition: this.props.dockPosition });
-        }
+export class Workspace extends Component<WorkspaceProps, WorkspaceState> {
+    constructor(props: WorkspaceProps) {
+        super(props);
+
+        this.state = {
+            id: props.id ?? componentId(100, 4040),
+            // Priorizamos dockPosition o menuPosition si vienen por props
+            menuPosition: props.dockPosition ?? props.menuPosition ?? 'left'
+        };
     }
 
-    handleSetDockPosition = (newPos: BarPosition) => {
-        this.setState({ dockPosition: newPos });
+    // ✅ Declaramos el método setPosition en la clase
+    setPosition = (newPos: BarPosition) => {
+        this.setState({ menuPosition: newPos });
+        if (this.props.onPositionChange) {
+            this.props.onPositionChange(newPos);
+        }
         if (this.props.onDockPositionChange) {
             this.props.onDockPositionChange(newPos);
         }
     };
 
     render(): ReactNode {
-        const { background, color, contextualMenu, dockBar, children } = this.props;
-        const { dockPosition } = this.state;
+        const {
+            contextBar, 
+            contextualMenu,
+            menuBar, 
+            dockBar,
+            children, 
+            background, 
+            color 
+        } = this.props;
 
-        const rootStyle: React.CSSProperties = {
-            backgroundColor: background ?? '#1e1e1e',
-            color: color ?? '#ffffff',
-            display: 'flex',
-            flexDirection: 'column',
-            height: '100vh',
-            width: '100vw',
-            overflow: 'hidden',
-            boxSizing: 'border-box'
-        };
+        // ✅ Extraemos menuPosition desde el estado de la clase
+        const { menuPosition } = this.state;
 
-        const frameStyle: React.CSSProperties = {
-            display: 'flex',
-            flexDirection: 'column',
-            flex: 1,
-            overflow: 'hidden',
-            
-        };
-
-        const bodyStyle: React.CSSProperties = {
-            display: 'flex',
-            flexDirection: dockPosition === 'right' ? 'row-reverse' : 'row',
-            flex: 1,
-            overflow: 'hidden',
-            position: 'relative'
-        };
-
-
+        const activeMenuBar = dockBar ?? menuBar;
+        const activeContextBar = contextualMenu ?? contextBar;
+        const isVertical = menuPosition === 'top' || menuPosition === 'bottom';
 
         return (
-            <WorkspaceContext.Provider value={{ dockPosition, setDockPosition: this.handleSetDockPosition }}>
-                <div style={rootStyle}>
-                    <div style={frameStyle}>
-                        {contextualMenu && (
-                            <div style={{ flexShrink: 0, zIndex: 20 }}>
-                                {contextualMenu}
-                            </div>
+            <WorkspaceContext.Provider 
+                value={{ 
+                    position: menuPosition, 
+                    dockPosition: menuPosition, 
+                    setPosition: this.setPosition, 
+                    setDockPosition: this.setPosition 
+                }}
+            >
+                <section className="workspace" style={{ backgroundColor: background, color: color }}>
+                    {activeContextBar && (
+                        <header className="context-menu">{activeContextBar}</header>
+                    )}
+
+                    <section 
+                        className={`content-workspace position-${menuPosition}`}
+                        style={{ flexDirection: isVertical ? 'column' : 'row' }}
+                    >
+                        {activeMenuBar && (
+                            <aside className="workspace-bar">{activeMenuBar}</aside>
                         )}
 
-                        <div style={bodyStyle}>
-                            {dockBar && (
-                                <div>
-                                    {dockBar}
-                                </div>
-                            )}
-
-                            <main>
-                                {children}
-                            </main>
-                        </div>
-                    </div>
-                </div>
+                        <section className="workspace-view">
+                            {children}
+                        </section>
+                    </section>
+                </section>
             </WorkspaceContext.Provider>
         );
     }

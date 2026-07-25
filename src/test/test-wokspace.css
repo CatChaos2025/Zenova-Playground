@@ -1,0 +1,38 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+html, body, #root {
+    width: 100%;
+    height: 100%;
+    background-color: #121212; /* O el color de fondo oscuro de tu app */
+    overflow: hidden; /* Evita barras de desplazamiento innecesarias */
+}
+
+
+.isDarkMode {
+    --md-sys-color-primary: #D0BCFF;
+    --md-sys-color-on-primary: #381E72;
+    --md-sys-color-primary-container: #4F378B;
+    --md-sys-color-on-primary-container: #EADDFF;
+    
+    --md-sys-color-surface: #141218;
+    --md-sys-color-on-surface: #E6E1E5;
+    --md-sys-color-surface-variant: #49454F;
+    
+    --md-sys-color-outline: #938F99;
+}
+
+#root {
+    background-color: var(--md-sys-color-primary);
+    transition: all 250ms cubic-bezier(0.075, 0.82, 0.165, 1);
+}
+
+.TestWorkspace{
+    display: flex;
+    flex-direction: column;
+    width: 100vw;
+    height: 100vh;
+}
