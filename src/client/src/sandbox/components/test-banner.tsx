@@ -214,7 +214,7 @@ export const TestBanner = () => {
         onClick={handleToggle}
         role="button"
         tabIndex={0}
-        onKeyDown={(e) => {
+        onKeyDown={(e: { key: string; preventDefault: () => void; }) => {
           if (e.key === "Enter" || e.key === " ") {
             e.preventDefault();
             handleToggle();

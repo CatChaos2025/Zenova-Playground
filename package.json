@@ -1,30 +1,17 @@
 {
-  "name": "cuserscatchaos2025appdatalocaltempzenova-setup",
+  "name": "zenova-playground",
   "private": true,
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "test:app": "cross-env VITE_APP_MODE=test vite",
-    "build": "tsc -b && vite build",
-    "lint": "oxlint",
-    "preview": "vite preview"
-  },
-  "dependencies": {
-    "@fontsource/roboto-mono": "^5.3.0",
-    "framer-motion": "^12.42.2",
-    "material-symbols": "^0.45.9",
-    "react": "^19.2.7",
-    "react-dom": "^19.2.7"
+    "dev:server": "pnpm --filter @zenova/server dev",
+    "dev:client": "pnpm --filter @zenova/client dev",
+    "dev": "concurrently -n \"SERVER,CLIENT\" -c \"green,blue\" \"pnpm dev:server\" \"pnpm dev:client\"",
+    "build": "pnpm --filter \"@zenova/*\" build",
+    "lint": "oxlint"
   },
   "devDependencies": {
-    "@types/node": "^26.1.1",
-    "@types/react": "^19.2.17",
-    "@types/react-dom": "^19.2.3",
-    "@vitejs/plugin-react": "^6.0.3",
-    "cross-env": "^10.1.0",
-    "oxlint": "^1.71.0",
-    "typescript": "~7.0.2",
-    "vite": "^8.1.1"
+    "concurrently": "^10.0.4",
+    "oxlint": "^1.75.0"
   }
 }

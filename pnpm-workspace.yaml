@@ -1,0 +1,8 @@
+packages:
+  - 'src/server'
+  - 'src/client'
+  - 'src/shared'
+allowBuilds:
+  esbuild: true
+minimumReleaseAgeExclude:
+  - concurrently@10.0.4

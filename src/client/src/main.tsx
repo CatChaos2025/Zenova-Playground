@@ -1,7 +1,7 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { App } from "./App";
-import { TestWorkspace } from "./test/test-wokspace";
+import { TestWorkspace } from "./sandbox/test-wokspace";
 
 // Imprime en consola qué valor está leyendo Vite
 console.log("Modo actual:", import.meta.env.VITE_APP_MODE);
