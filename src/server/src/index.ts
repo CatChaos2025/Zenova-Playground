@@ -32,7 +32,8 @@ fastify.get('/api/health', async (request, reply) => {
 
 // 3. Servir el Frontend de React/Vite compilado
 // Asumiendo la estructura: src/server/dist y src/client/dist
-const clientDistPath = path.join(__dirname, '../../../client/dist');
+const clientDistPath = path.join(__dirname, '../../client/dist');
+console.log('Directorio del cliente resuelto en:', clientDistPath);
 
 await fastify.register(fastifyStatic, {
   root: clientDistPath,
