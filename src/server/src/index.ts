@@ -1,35 +1,55 @@
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
+import fastifyStatic from '@fastify/static';
 import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import type { ApiResponse } from '@zenova/shared';
 
-// 1. Importa tus rutas de usuarios (asegúrate de incluir la extensión .js para ESM)
 import { userRoutes } from './routes/users.js';
 
 dotenv.config();
 
-const fastify = Fastify({
-  logger: true
-});
+// Utilidad para rutas ESM
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
-// Registrar Middlewares
-await fastify.register(cors, {
-  origin: true
-});
+const fastify = Fastify({ logger: true });
 
-// 2. Registra las rutas de usuarios
+// 1. Middlewares
+await fastify.register(cors, { origin: true });
+
+// 2. Rutas del Backend (API)
 await fastify.register(userRoutes);
 
-// Rutas directas de la API
 fastify.get('/api/health', async (request, reply) => {
   const response: ApiResponse<{ status: string }> = {
     success: true,
     data: { status: 'Fastify backend running smoothly!' }
   };
-  
   return response;
 });
 
+// 3. Servir el Frontend de React/Vite compilado
+// Asumiendo la estructura: src/server/dist y src/client/dist
+const clientDistPath = path.join(__dirname, '../../../client/dist');
+
+await fastify.register(fastifyStatic, {
+  root: clientDistPath,
+  // IMPORTANTE: Evita que el plugin intente manejar las rutas de /api
+  wildcard: false 
+});
+
+// 4. Fallback para React Router (Single Page App)
+// Cualquier ruta que no sea /api/... devolverá el index.html de React
+fastify.get('/*', async (request, reply) => {
+  if (request.url.startsWith('/api')) {
+    return reply.status(404).send({ error: 'API route not found' });
+  }
+  return reply.sendFile('index.html');
+});
+
+// Inicialización
 const start = async () => {
   try {
     const port = Number(process.env.PORT) || 3000;
