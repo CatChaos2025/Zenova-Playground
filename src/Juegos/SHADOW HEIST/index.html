@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SHADOW HEIST</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="game-wrapper">
+        <header class="hud">
+            <div class="info-box">
+                <span class="label">NIVEL</span>
+                <span id="level" class="value">1</span>
+            </div>
+            <div class="info-box">
+                <span class="label">OBRAS</span>
+                <span id="artworks" class="value">0/3</span>
+            </div>
+            <div class="info-box">
+                <span class="label">ALERTA</span>
+                <div class="alert-bar"><div id="alert-bar" class="alert-fill"></div></div>
+            </div>
+        </header>
+
+        <canvas id="c"></canvas>
+
+        <div id="overlay" class="overlay active">
+            <h1 id="overlay-title">SHADOW HEIST</h1>
+            <p id="overlay-subtitle">Roba en las sombras. Nunca te vean.</p>
+            <button id="start-btn">INICIAR MISIÓN</button>
+            <div class="controls-hint">WASD: Mover | ESPACIO: Apagar luz | R: Reiniciar</div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>

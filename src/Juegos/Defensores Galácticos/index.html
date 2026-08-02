@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Defensores Galácticos</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="contenedor">
+        <header>
+            <h1>🛡️ Defensores Galácticos</h1>
+            <p class="subtitulo">Protege la galaxia de la invasión alienígena</p>
+        </header>
+        
+        <div class="ui-panel">
+            <div class="stat">
+                <span class="label">OLEADA</span>
+                <span class="valor" id="oleada">1</span>
+            </div>
+            <div class="stat">
+                <span class="label">💰 CRÉDITOS</span>
+                <span class="valor" id="creditos">200</span>
+            </div>
+            <div class="stat">
+                <span class="label">❤️ BASE</span>
+                <div class="barra-vida">
+                    <div class="barra-relleno" id="barraVida"></div>
+                </div>
+                <span class="valor" id="vidaTexto">20/20</span>
+            </div>
+            <div class="stat">
+                <span class="label">ENEMIGOS</span>
+                <span class="valor" id="enemigosRestantes">0</span>
+            </div>
+        </div>
+        
+        <div class="area-juego">
+            <canvas id="gameCanvas" width="800" height="600"></canvas>
+            
+            <aside class="panel-lateral">
+                <div class="torres">
+                    <h3>🏗️ Torres</h3>
+                    <div class="torre-card" data-torre="basica">
+                        <div class="torre-icono">🔫</div>
+                        <div class="torre-info">
+                            <div class="torre-nombre">Láser Básico</div>
+                            <div class="torre-coste">💰 50</div>
+                            <div class="torre-desc">Daño rápido</div>
+                        </div>
+                    </div>
+                    <div class="torre-card" data-torre="cañon">
+                        <div class="torre-icono">💣</div>
+                        <div class="torre-info">
+                            <div class="torre-nombre">Cañón</div>
+                            <div class="torre-coste">💰 100</div>
+                            <div class="torre-desc">Daño en área</div>
+                        </div>
+                    </div>
+                    <div class="torre-card" data-torre="hielo">
+                        <div class="torre-icono">❄️</div>
+                        <div class="torre-info">
+                            <div class="torre-nombre">Criogénica</div>
+                            <div class="torre-coste">💰 75</div>
+                            <div class="torre-desc">Ralentiza enemigos</div>
+                        </div>
+                    </div>
+                    <div class="torre-card" data-torre="electrico">
+                        <div class="torre-icono">⚡</div>
+                        <div class="torre-info">
+                            <div class="torre-nombre">Tesla</div>
+                            <div class="torre-coste">💰 150</div>
+                            <div class="torre-desc">Daño en cadena</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="controles-juego">
+                    <h3>🎮 Controles</h3>
+                    <ul>
+                        <li><strong>Click</strong> en torre para seleccionar</li>
+                        <li><strong>Click</strong> en mapa para colocar</li>
+                        <li><strong>Click</strong> en torre existente para mejorar</li>
+                        <li><strong>ESC</strong> Cancelar selección</li>
+                        <li><strong>ESPACIO</strong> Siguiente oleada</li>
+                    </ul>
+                    <button id="btnOleada" class="btn-oleada">▶️ Iniciar Oleada</button>
+                </div>
+            </aside>
+        </div>
+    </div>
+    
+    <div id="modalGameOver" class="modal oculto">
+        <div class="modal-contenido">
+            <h2>💀 BASE DESTRUIDA</h2>
+            <div id="estadisticas"></div>
+            <button id="btnReiniciar" class="btn-reiniciar">Reiniciar</button>
+        </div>
+    </div>
+    
+    <div id="modalVictoria" class="modal oculto">
+        <div class="modal-contenido">
+            <h2>🏆 ¡VICTORIA!</h2>
+            <p>Has defendido la galaxia</p>
+            <div id="estadisticasVictoria"></div>
+            <button id="btnReiniciarVictoria" class="btn-reiniciar">Jugar de Nuevo</button>
+        </div>
+    </div>
+    
+    <script src="script.js"></script>
+</body>
+</html>

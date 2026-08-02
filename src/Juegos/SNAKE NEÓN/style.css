@@ -1,0 +1,107 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    background: #000;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    font-family: 'Arial', sans-serif;
+    overflow: hidden; /* Evita scroll */
+}
+
+.contenedor {
+    text-align: center;
+    padding: 10px; /* Un poco de margen interno */
+}
+
+header {
+    margin-bottom: 10px;
+}
+
+h1 {
+    font-size: 2em; /* Fuente un poco más pequeña */
+    color: #00ff00;
+    text-shadow: 0 0 20px #00ff00, 0 0 40px #00ff00;
+    letter-spacing: 5px;
+    animation: brillar 2s ease-in-out infinite;
+}
+
+@keyframes brillar {
+    0%, 100% { text-shadow: 0 0 20px #00ff00, 0 0 40px #00ff00; }
+    50% { text-shadow: 0 0 30px #00ff00, 0 0 60px #00ff00, 0 0 80px #00ff00; }
+}
+
+.subtitulo {
+    color: #888;
+    font-style: italic;
+    margin-top: 2px;
+    font-size: 0.9em;
+}
+
+.panel-superior {
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+    margin-bottom: 10px;
+    flex-wrap: wrap; /* Para móviles */
+}
+
+.score-box {
+    background: rgba(0, 255, 0, 0.1);
+    border: 2px solid #00ff00;
+    border-radius: 10px;
+    padding: 5px 15px;
+    min-width: 80px;
+    box-shadow: 0 0 15px rgba(0, 255, 0, 0.3);
+}
+
+.score-label {
+    display: block;
+    font-size: 0.7em;
+    color: #00ff00;
+    letter-spacing: 2px;
+    font-weight: bold;
+}
+
+.score-value {
+    display: block;
+    font-size: 1.4em;
+    font-weight: bold;
+    color: #fff;
+    text-shadow: 0 0 10px #00ff00;
+}
+
+canvas {
+    display: block;
+    border: 3px solid #00ff00;
+    border-radius: 10px;
+    box-shadow: 0 0 30px rgba(0, 255, 0, 0.5);
+    background: #0a0a0a;
+    margin: 0 auto;
+    max-width: 100%; /* Responsive */
+    height: auto;
+}
+
+.controles-info {
+    margin-top: 10px;
+    color: #888;
+    font-size: 0.8em;
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.key {
+    background: rgba(0, 255, 0, 0.2);
+    border: 1px solid #00ff00;
+    color: #00ff00;
+    padding: 4px 10px;
+    border-radius: 5px;
+    font-weight: bold;
+}

@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rana Cruzada</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="contenedor">
+        <header>
+            <h1>🐸 RANA CRUZADA</h1>
+        </header>
+        
+        <div class="panel-superior">
+            <div class="score-box">
+                <span class="score-label">PUNTOS</span>
+                <span class="score-value" id="score">0</span>
+            </div>
+            <div class="score-box">
+                <span class="score-label">VIDAS</span>
+                <span class="score-value" id="vidas">🐸🐸🐸</span>
+            </div>
+            <div class="score-box">
+                <span class="score-label">RÉCORD</span>
+                <span class="score-value" id="record">0</span>
+            </div>
+        </div>
+        
+        <canvas id="gameCanvas" width="500" height="500"></canvas>
+        
+        <div class="controles-info">
+            <span class="key">←→↑↓</span> Mover
+            <span class="key">ENTER</span> Iniciar
+        </div>
+    </div>
+    
+    <script src="script.js"></script>
+</body>
+</html>

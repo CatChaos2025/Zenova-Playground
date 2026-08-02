@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Luna Runner</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="contenedor">
+        <canvas id="gameCanvas" width="900" height="350"></canvas>
+        <div class="ui-overlay">
+            <div class="score-box">
+                <span class="score-label">HI</span>
+                <span class="score-value" id="record">00000</span>
+            </div>
+            <div class="score-box">
+                <span class="score-label">PTS</span>
+                <span class="score-value" id="score">00000</span>
+            </div>
+        </div>
+        <div class="controles-info">
+            <span class="key">↑ / ESPACIO</span> Saltar
+            <span class="key">↓</span> Agacharse
+            <span class="key">CLICK</span> Iniciar
+        </div>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>

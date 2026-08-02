@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Salto Estelar</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="contenedor">
+        <canvas id="gameCanvas" width="500" height="700"></canvas>
+        <div class="ui-overlay">
+            <div class="score-box">
+                <span class="score-label">ALTURA</span>
+                <span class="score-value" id="altura">0m</span>
+            </div>
+            <div class="score-box">
+                <span class="score-label">RÉCORD</span>
+                <span class="score-value" id="record">0m</span>
+            </div>
+        </div>
+        <div class="controles-info">
+            <span class="key">←→</span> Mover
+            <span class="key">ESPACIO</span> Iniciar
+        </div>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>

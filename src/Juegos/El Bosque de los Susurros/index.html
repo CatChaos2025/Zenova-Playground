@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>El Bosque de los Susurros</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="contenedor">
+        <header>
+            <h1>🌲 El Bosque de los Susurros</h1>
+            <p class="subtitulo">Recupera los cristales. Salva el reino.</p>
+        </header>
+        
+        <div class="ui-panel">
+            <div class="stat">
+                <span class="label">VIDA</span>
+                <div class="barra-vida">
+                    <div class="barra-relleno" id="barraVida"></div>
+                </div>
+                <span class="valor" id="vidaTexto">100/100</span>
+            </div>
+            <div class="stat">
+                <span class="label">ORO</span>
+                <span class="valor" id="oro">💰 0</span>
+            </div>
+            <div class="stat">
+                <span class="label">CRISTALES</span>
+                <span class="valor" id="cristales">💎 0/3</span>
+            </div>
+            <div class="stat">
+                <span class="label">ZONA</span>
+                <span class="valor" id="zona">Claro Inicial</span>
+            </div>
+        </div>
+        
+        <div class="area-juego">
+            <canvas id="gameCanvas" width="800" height="500"></canvas>
+            
+            <aside class="panel-lateral">
+                <div class="inventario">
+                    <h3>🎒 Inventario [I]</h3>
+                    <ul id="listaInventario"></ul>
+                </div>
+                
+                <div class="misiones">
+                    <h3>📜 Misiones</h3>
+                    <ul id="listaMisiones"></ul>
+                </div>
+                
+                <div class="controles">
+                    <h3>🎮 Controles</h3>
+                    <ul>
+                        <li><strong>←→↑↓</strong> Mover</li>
+                        <li><strong>E</strong> Interactuar</li>
+                        <li><strong>I</strong> Inventario</li>
+                        <li><strong>ESPACIO</strong> Atacar</li>
+                        <li><strong>M</strong> Mapa</li>
+                    </ul>
+                </div>
+            </aside>
+        </div>
+        
+        <div id="dialogo" class="dialogo oculto">
+            <div class="dialogo-contenido">
+                <div class="dialogo-nombre" id="dialogoNombre">NPC</div>
+                <div class="dialogo-texto" id="dialogoTexto"></div>
+                <div class="dialogo-opciones" id="dialogoOpciones"></div>
+                <div class="dialogo-continuar">Presiona E para continuar</div>
+            </div>
+        </div>
+        
+        <div id="inventarioModal" class="modal oculto">
+            <div class="modal-contenido">
+                <h2>🎒 Inventario</h2>
+                <div id="itemsInventario" class="grid-items"></div>
+                <p class="cerrar-modal">Presiona I o ESC para cerrar</p>
+            </div>
+        </div>
+        
+        <div id="mapaModal" class="modal oculto">
+            <div class="modal-contenido">
+                <h2>🗺️ Mapa del Bosque</h2>
+                <div id="mapaVisual" class="mapa-visual"></div>
+                <p class="cerrar-modal">Presiona M o ESC para cerrar</p>
+            </div>
+        </div>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>

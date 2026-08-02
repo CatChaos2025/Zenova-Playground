@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NEON RACER OVERDRIVE</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="game-container">
+    <header class="hud">
+      <div class="score-box">
+        <span class="label">PUNTOS</span>
+        <span id="score">0</span>
+      </div>
+      <div class="score-box high-score">
+        <span class="label">RÉCORD</span>
+        <span id="highScore">0</span>
+      </div>
+      <div class="score-box">
+        <span class="label">VELOCIDAD</span>
+        <span id="speedDisplay">0</span>
+      </div>
+    </header>
+
+    <div class="canvas-wrapper">
+      <canvas id="gameCanvas"></canvas>
+      
+      <div id="overlay" class="active">
+        <h1 id="overlayTitle">NEON RACER</h1>
+        <p id="overlaySubtitle">ESQUIVA Y SOBREVIVE</p>
+        <button id="startButton">JUGAR AHORA</button>
+        <p class="controls-hint">← → para moverte | ESPACIO para turbo</p>
+      </div>
+    </div>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
