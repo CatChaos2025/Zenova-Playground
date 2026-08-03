@@ -1,0 +1,302 @@
+/* ============================================
+   WINDOWS 11 FLUENT DESIGN SYSTEM
+   ============================================ */
+
+@layer tokens {
+  :root {
+    /* Colores base */
+    --bg-primary: #202020;
+    --bg-secondary: #2d2d2d;
+    --bg-elevated: #383838;
+    --bg-content: #1a1a1a;
+    
+    /* Texto */
+    --text-primary: #ffffff;
+    --text-secondary: #b3b3b3;
+    --text-disabled: #666666;
+    
+    /* Bordes y acentos */
+    --border-subtle: rgba(255, 255, 255, 0.08);
+    --border-strong: rgba(255, 255, 255, 0.15);
+    --accent-primary: #0078d4;
+    --accent-hover: #1084d8;
+    
+    /* Sombras */
+    --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.3);
+    --shadow-md: 0 8px 16px rgba(0, 0, 0, 0.4);
+    --shadow-lg: 0 16px 32px rgba(0, 0, 0, 0.5);
+    
+    /* Dimensiones */
+    --header-height: 32px;
+    --taskbar-height: 48px;
+    --radius-sm: 4px;
+    --radius-md: 8px;
+    
+    /* Transiciones */
+    --transition-fast: 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+    --transition-normal: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+}
+
+@layer base {
+  body {
+    margin: 0;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    overflow: hidden;
+  }
+
+  .desktop {
+    position: fixed;
+    inset: 0;
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+  }
+}
+
+@layer components {
+  /* ===== VENTANA PRINCIPAL ===== */
+  .window {
+    position: absolute;
+    left: var(--x);
+    top: var(--y);
+    width: var(--w);
+    height: var(--h);
+    z-index: var(--z);
+    
+    display: flex;
+    flex-direction: column;
+    
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-md);
+    
+    overflow: hidden;
+    transition: 
+      box-shadow var(--transition-fast),
+      border-color var(--transition-fast);
+    
+    will-change: transform;
+  }
+
+  .window.is-focused {
+    border-color: var(--border-strong);
+    box-shadow: var(--shadow-lg);
+  }
+
+  .window.is-maximized {
+    --x: 0px !important;
+    --y: 0px !important;
+    --w: 100vw !important;
+    --h: calc(100vh - var(--taskbar-height)) !important;
+    border-radius: 0;
+  }
+
+  .window.is-dragging {
+    cursor: grabbing;
+    transition: none;
+  }
+
+  /* ===== HEADER DE VENTANA ===== */
+  .window-header {
+    height: var(--header-height);
+    background: var(--bg-elevated);
+    border-bottom: 1px solid var(--border-subtle);
+    
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    
+    padding: 0 8px 0 12px;
+    cursor: default;
+    user-select: none;
+    flex-shrink: 0;
+  }
+
+  .window-header.is-draggable {
+    cursor: grab;
+  }
+
+  .window-header.is-draggable:active {
+    cursor: grabbing;
+  }
+
+  .window-header-info {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+  }
+
+  .window-header-icon {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+  }
+
+  .window-header-title {
+    font-size: 12px;
+    font-weight: 400;
+    color: var(--text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* ===== BOTONES DE CONTROL ===== */
+  .window-controls {
+    display: flex;
+    height: 100%;
+    margin-right: -8px;
+  }
+
+  .window-btn {
+    width: 46px;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    
+    background: transparent;
+    border: none;
+    color: var(--text-primary);
+    cursor: pointer;
+    
+    transition: background var(--transition-fast);
+  }
+
+  .window-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+  }
+
+  .window-btn:active {
+    background: rgba(255, 255, 255, 0.15);
+  }
+
+  .window-btn--close:hover {
+    background: #e81123;
+  }
+
+  .window-btn--close:active {
+    background: #bf0f1d;
+  }
+
+  .window-btn svg {
+    width: 10px;
+    height: 10px;
+  }
+
+  /* ===== CONTENIDO ===== */
+  .window-content {
+    flex: 1;
+    overflow: auto;
+    background: var(--bg-content);
+    user-select: text;
+  }
+
+  /* ===== RESIZE HANDLES ===== */
+  .resize-handle {
+    position: absolute;
+    z-index: 10;
+  }
+
+  .resize-handle--n { top: -3px; left: 8px; right: 8px; height: 6px; cursor: ns-resize; }
+  .resize-handle--s { bottom: -3px; left: 8px; right: 8px; height: 6px; cursor: ns-resize; }
+  .resize-handle--e { right: -3px; top: 8px; bottom: 8px; width: 6px; cursor: ew-resize; }
+  .resize-handle--w { left: -3px; top: 8px; bottom: 8px; width: 6px; cursor: ew-resize; }
+  .resize-handle--ne { top: -3px; right: -3px; width: 10px; height: 10px; cursor: nesw-resize; }
+  .resize-handle--nw { top: -3px; left: -3px; width: 10px; height: 10px; cursor: nwse-resize; }
+  .resize-handle--se { bottom: -3px; right: -3px; width: 10px; height: 10px; cursor: nwse-resize; }
+  .resize-handle--sw { bottom: -3px; left: -3px; width: 10px; height: 10px; cursor: nesw-resize; }
+
+  .is-maximized .resize-handle,
+  .is-snapped .resize-handle {
+    display: none;
+  }
+
+  /* ===== TASKBAR ===== */
+  .taskbar {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: var(--taskbar-height);
+    
+    background: rgba(32, 32, 32, 0.85);
+    backdrop-filter: blur(20px) saturate(180%);
+    border-top: 1px solid var(--border-subtle);
+    
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 0 12px;
+    
+    z-index: 9999;
+  }
+
+  .taskbar-item {
+    height: 40px;
+    min-width: 40px;
+    padding: 0 12px;
+    
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    
+    background: transparent;
+    border: none;
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    font-size: 13px;
+    cursor: pointer;
+    
+    transition: background var(--transition-fast);
+    position: relative;
+  }
+
+  .taskbar-item:hover {
+    background: rgba(255, 255, 255, 0.08);
+  }
+
+  .taskbar-item:active {
+    background: rgba(255, 255, 255, 0.12);
+  }
+
+  .taskbar-item.is-active {
+    background: rgba(255, 255, 255, 0.12);
+  }
+
+  .taskbar-item.is-active::after {
+    content: '';
+    position: absolute;
+    bottom: 2px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 16px;
+    height: 3px;
+    background: var(--accent-primary);
+    border-radius: 2px;
+  }
+
+  .taskbar-item img {
+    width: 20px;
+    height: 20px;
+  }
+
+  /* ===== SNAP PREVIEW ===== */
+  .snap-preview {
+    position: fixed;
+    background: rgba(0, 120, 212, 0.15);
+    border: 2px solid var(--accent-primary);
+    border-radius: var(--radius-md);
+    
+    pointer-events: none;
+    z-index: 9998;
+    
+    backdrop-filter: blur(8px);
+    transition: all var(--transition-normal);
+  }
+}

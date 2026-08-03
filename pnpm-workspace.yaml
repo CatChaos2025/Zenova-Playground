@@ -2,7 +2,11 @@ packages:
   - 'src/server'
   - 'src/client'
   - 'src/shared'
+  - 'src/winstart'
 allowBuilds:
+  '@prisma/engines': true
+  better-sqlite3: true
   esbuild: true
+  prisma: true
 minimumReleaseAgeExclude:
   - concurrently@10.0.4

@@ -1,0 +1,23 @@
+{
+	"folders": [
+		{
+			"path": "."
+		},
+		{
+			"path": "src/client"
+		},
+		{
+			"path": "src/server"
+		},
+		{
+			"path": "src/shared"
+		},
+		{
+			"path": "scripts"
+		},
+		{
+			"path": "src/winstart"
+		}
+	],
+	"settings": {}
+}
