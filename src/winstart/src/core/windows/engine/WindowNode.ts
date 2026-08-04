@@ -9,29 +9,21 @@
  *    (___ \   /        |      @copyright 2025-2026 CatChaos2025
  *        \ \ /         |
  * <<--------------------------------------------------------------------------------->>
- * */
+ **/
 
-import { Vector2 } from "../../utilities/Vectors";
-import { AppManifest } from "../services/AppManifest";
-import { WindowConfig } from "../services/WindowProps";
-import { WindowStateEnum, WindowStateMachine } from "./WindowState";
+import { Vector2 } from "../../../utils/Vectors";
+import { AppManifest } from "../contracts/AppManifest";
+import { WindowConfig } from "../contracts/WindowProps";
+import { WindowTheme } from "../contracts/WindowTheme";
+import { WindowStateMachine } from "./WindowState";
 const webWindow: Window & typeof globalThis = window;
 
-
 export class WindowNode {
-    
-
     /**
      * @param id - Este es el identificador de la ventana, su valor no puede sobrepasar el del fondo
-     * 
-     * 
      * @param title - Este es el titulo de la ventana
-     * 
-     * 
-     * @param position - Representa el valor de posición que tendrá la ventana en el espacio del escritorio, de valor vectorial bidimensional (Vector2)
-     * 
-     * 
-     * @param size - Representa el valor de la altura y  el ancho que tendrá la ventana en el espacio del escritorio, de valor vectorial bidimensional (Vector2)
+     * @param position - Representa el valor de posición que tendrá la ventana en el espacio del escritorio (Vector2)
+     * @param size - Representa el valor de la altura y el ancho que tendrá la ventana (Vector2)
      */
 
     public id: string;
@@ -42,21 +34,17 @@ export class WindowNode {
     public minSize: Vector2;
     public maxSize: Vector2;
     public flags: AppManifest['flags'];
-    public theme: {
-        windowBg: string;
-        highlightColor: string;
-        contentBg: string;
-    }
+    public theme: WindowTheme;
 
     public zIndex: number;
     public fsm: WindowStateMachine;
 
     private cachedBounds: { position: Vector2; size: Vector2 } | null = null;
 
-    constructor(options: WindowConfig){
+    constructor(options: WindowConfig) {
         const manifest = options.manifest;
 
-        this.id = options.id || Math.random().toString(36).substring(2,9);
+        this.id = options.id || Math.random().toString(36).substring(2, 9);
         this.title = options.title || manifest?.title || 'New Start Compose';
         this.manifest = manifest;
 
@@ -75,14 +63,26 @@ export class WindowNode {
         const customTheme = options.theme;
         const manifestTheme = manifest?.theme;
 
+        // Integración completa del sistema de temas, incluyendo colorScheme
         this.theme = {
-            windowBg: customTheme?.windowBg || manifestTheme?.windowBg || '#171717',       // Gris oscuro por defecto
-            highlightColor: customTheme?.highlightColor || manifestTheme?.highlightColor || '#3b82f6', // Azul acento por defecto
-            contentBg: customTheme?.contentBg || manifestTheme?.contentBg || '#0a0a0a',     // Negro profundo antes de cargar
-        }
+            colorScheme: customTheme?.colorScheme || manifestTheme?.colorScheme || 'system',
+            windowBg: customTheme?.windowBg || manifestTheme?.windowBg,
+            titlebarBg: customTheme?.titlebarBg || manifestTheme?.titlebarBg,
+            highlightColor: customTheme?.highlightColor || manifestTheme?.highlightColor || '#3b82f6',
+            contentBg: customTheme?.contentBg || manifestTheme?.contentBg,
+            fontFamily: customTheme?.fontFamily || manifestTheme?.fontFamily,
+        };
 
         this.zIndex = 1;
         this.fsm = new WindowStateMachine();
+    }
+
+    /** Actualiza parcial o totalmente el tema de la ventana en tiempo de ejecución */
+    public setTheme(newTheme: Partial<WindowTheme>): void {
+        this.theme = {
+            ...this.theme,
+            ...newTheme,
+        };
     }
 
     public moveTo(pos: Vector2): void {
@@ -103,25 +103,26 @@ export class WindowNode {
         }
     }
 
-    public toggleState(): void {
-        const state = this.fsm.getState();
+    public toggleState() {
+        const currentState = this.fsm.getState();
 
-        if (state === 'MAXIMIZED') {
-            if (this.cachedBounds && this.fsm.transition('NORMAL')) {
-                this.position = this.cachedBounds.position;
-                this.size = this.cachedBounds.size;
-                this.cachedBounds = null;
+        if (currentState === 'MAXIMIZED') {
+            // RESTAURAR: Volver al estado normal y recuperar las coordenadas guardadas
+            this.fsm.transition('NORMAL');
+            if (this.cachedBounds) {
+                this.position = this.cachedBounds.position.clone();
+                this.size = this.cachedBounds.size.clone();
             }
         } else {
-            if (this.fsm.transition('MAXIMIZED')) {
-                this.cachedBounds = {
-                    position: this.position.clone(),
-                    size: this.size.clone()
-                };
-
-                this.position = new Vector2(0,0);
-                this.size = new Vector2(webWindow.innerWidth, webWindow.innerHeight);
-            }
+            // MAXIMIZAR: Guardar posición/tamaño actual y expandir a pantalla completa
+            this.cachedBounds = {
+                position: this.position.clone(),
+                size: this.size.clone()
+            };
+            this.fsm.transition('MAXIMIZED');
+            // Aquí ajustas la posición a 0,0 y el tamaño al viewport o contenedor padre
+            this.position = new Vector2(0, 0);
+            this.size = new Vector2(window.innerWidth, window.innerHeight);
         }
     }
 }

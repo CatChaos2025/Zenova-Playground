@@ -1,0 +1,140 @@
+:root,
+.win-window-root[data-theme=":default"] {
+    color-scheme: light dark;
+
+    /* Tipografía */
+    --win-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    --win-font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+
+    /* Variables de Color (Base) */
+    --win-bg: light-dark(#ffffff, #18181b);
+    --win-titlebar-bg: light-dark(#f4f4f5, #27272a);
+    --win-content-bg: light-dark(#fafafa, #09090b);
+    
+    --win-text: light-dark(#18181b, #f4f4f5);
+    --win-text-muted: light-dark(#71717a, #a1a1aa);
+
+    --win-border: light-dark(#e4e4e7, #3f3f46);
+    --win-border-focused: light-dark(#2563eb, #3b82f6);
+
+    --win-btn-hover: light-dark(rgba(0, 0, 0, 0.05), rgba(255, 255, 255, 0.1));
+    --win-btn-close-hover: #ef4444;
+
+    --win-radius: 0.5rem;
+    --win-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.2);
+}
+
+.win-window-root[data-theme="cyberpunk"] {
+    color-scheme: dark;
+    --win-bg: #0f051d;
+    --win-titlebar-bg: #1a0b2e;
+    --win-content-bg: #05020a;
+    --win-text: #00ffcc;
+    --win-text-muted: #a855f7;
+    --win-border: #7928ca;
+    --win-border-focused: #00ffcc;
+    --win-btn-hover: rgba(0, 255, 204, 0.15);
+}
+
+.win-frame {
+    position: relative;
+    transform: translate(var(--win-x), var(--win-y));
+    width: var(--win-w);
+    height: var(--win-h);
+    z-index: var(--win-z);
+
+    display: flex;
+    flex-direction: column;
+    background-color: var(--win-bg);
+    border: 1px solid var(--win-border);
+    border-radius: var(--win-radius);
+    box-shadow: var(--win-shadow);
+    font-family: var(--win-font);
+    overflow: hidden;
+    transition: border-color 0.15s ease;
+}
+
+.win-frame.is-focused {
+    border-color: var(--win-border-focused);
+}
+
+.win-titlebar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 32px;
+    padding: 0 0.5rem;
+    background-color: var(--win-titlebar-bg);
+    border-bottom: 1px solid var(--win-border);
+    user-select: none;
+    cursor: grab;
+}
+
+.win-titlebar:active { cursor: grabbing; }
+
+.win-titlebar-left {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.win-title-text {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--win-text);
+}
+
+.win-about-btn,
+.win-control-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border: none;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--win-text-muted);
+    cursor: pointer;
+    transition: background 0.1s, color 0.1s;
+}
+
+.win-about-btn:hover,
+.win-control-btn:hover {
+    background-color: var(--win-btn-hover);
+    color: var(--win-text);
+}
+
+.win-control-btn-close:hover {
+    background-color: var(--win-btn-close-hover);
+    color: #fff;
+}
+
+.win-action-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+.win-content-viewport {
+    flex: 1;
+    background-color: var(--win-content-bg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.win-runtime-placeholder {
+    font-size: 0.75rem;
+    color: var(--win-text-muted);
+    font-family: var(--win-font-mono);
+}
+
+.win-titlebar {
+    touch-action: none;
+    user-select: none;
+}
+
+.win-resize-handle {
+    touch-action: none;
+}

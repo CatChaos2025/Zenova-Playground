@@ -11,9 +11,9 @@
  * <<--------------------------------------------------------------------------------->>
  * */
 
-import { WindowNode } from "../models/WindowNode";
-import { Vector2 } from "../../utilities/Vectors";
-import { WindowConfig } from "../services/WindowProps";
+import { WindowNode } from "./WindowNode";
+import { Vector2 } from "../../../utils/Vectors";
+import { WindowConfig } from "../contracts/WindowProps";
 
 export class WindowEngine {
     private windows: Map<string, WindowNode> = new Map();

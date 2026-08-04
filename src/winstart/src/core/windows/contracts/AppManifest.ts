@@ -11,8 +11,8 @@
  * <<--------------------------------------------------------------------------------->>
  * */
 
-import { Vector2 } from "../../utilities/Vectors";
-import { WindowTheme } from "./WindowsTheme";
+import { Vector2 } from "../../../utils/Vectors";
+import { WindowTheme } from "./WindowTheme";
 
 export interface AppManifest{
     // --Identificador de la ventana--
@@ -28,6 +28,7 @@ export interface AppManifest{
         allowMaximize: boolean;
         allowMinimize: boolean;
         allowResize: boolean;
+        allowClose?: boolean;
         isAlwaysOnTop?: boolean;
     };
 
