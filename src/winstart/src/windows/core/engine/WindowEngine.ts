@@ -12,7 +12,7 @@
  * */
 
 import { WindowNode } from "./WindowNode";
-import { Vector2 } from "../../../utils/Vectors";
+import { Vector2 } from "./Vectors";
 import { WindowConfig } from "../contracts/WindowProps";
 
 export class WindowEngine {

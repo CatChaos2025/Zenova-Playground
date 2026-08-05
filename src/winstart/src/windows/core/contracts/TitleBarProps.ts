@@ -1,3 +1,16 @@
+/* prettier-ignore */
+/** 
+ * <<--------------------------------------------------------------------------------->>
+ *              _      _
+ *             / \    / \      @package WinStart
+ *            /  _\__/ ^ \     @file TitleBarProps.ts
+ *           /   __    __ \    @autor CatChaos2025 <https://github.com/CatChaos2025>
+ *     ____  \______^_____/    @license Apache-2.0
+ *    (___ \   /        |      @copyright 2025-2026 CatChaos2025
+ *        \ \ /         |
+ * <<--------------------------------------------------------------------------------->>
+ * */
+
 import { WindowNode } from "../engine/WindowNode";
 
 export interface TitleBarActions{

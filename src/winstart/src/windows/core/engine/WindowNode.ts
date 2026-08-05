@@ -11,7 +11,7 @@
  * <<--------------------------------------------------------------------------------->>
  **/
 
-import { Vector2 } from "../../../utils/Vectors";
+import { Vector2 } from "./Vectors";
 import { AppManifest } from "../contracts/AppManifest";
 import { WindowConfig } from "../contracts/WindowProps";
 import { WindowTheme } from "../contracts/WindowTheme";

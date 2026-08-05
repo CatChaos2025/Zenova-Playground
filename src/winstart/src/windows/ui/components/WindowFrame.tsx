@@ -12,7 +12,7 @@
  * */
 
 import React from 'react';
-import { WindowNode } from '../core/windows/engine/WindowNode';
+import { WindowNode } from '../../core/windows/engine/WindowNode';
 import { WindowTitleBar } from './WindowTitleBar';
 import { WindowContent } from './WindowContent';
 import '../themes/apptheme.css';
