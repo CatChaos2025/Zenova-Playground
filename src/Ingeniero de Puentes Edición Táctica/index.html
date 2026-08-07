@@ -1,0 +1,781 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ingeniero de Puentes</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { overflow: hidden; background: #0f0f1a; font-family: 'Segoe UI', Arial, sans-serif; user-select: none; }
+        canvas { display: block; cursor: crosshair; }
+        
+        #top-bar {
+            position: absolute; top: 0; left: 0; right: 0;
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 12px 20px;
+            background: linear-gradient(180deg, rgba(0,0,0,0.9) 0%, transparent 100%);
+            pointer-events: none; z-index: 10;
+        }
+        .stat-box { display: flex; gap: 20px; }
+        .stat { text-align: center; color: white; }
+        .stat-value { font-size: 20px; font-weight: bold; color: #00d2ff; }
+        .stat-label { font-size: 10px; opacity: 0.6; text-transform: uppercase; }
+        .stat-value.warning { color: #ff6b6b; animation: blink 0.5s infinite; }
+        @keyframes blink { 50% { opacity: 0.5; } }
+        
+        #bottom-bar {
+            position: absolute; bottom: 0; left: 0; right: 0;
+            display: flex; justify-content: center; gap: 8px;
+            padding: 15px; flex-wrap: wrap;
+            background: linear-gradient(0deg, rgba(0,0,0,0.9) 0%, transparent 100%);
+            z-index: 10;
+        }
+        .btn {
+            padding: 12px 18px; font-size: 13px; font-weight: bold;
+            border: none; border-radius: 8px; cursor: pointer;
+            transition: all 0.2s; text-transform: uppercase;
+        }
+        .btn:hover { transform: translateY(-2px); }
+        .btn-build { background: #0984e3; color: white; }
+        .btn-delete { background: #d63031; color: white; }
+        .btn-test { background: #00b894; color: white; font-size: 15px; }
+        .btn-reset { background: #636e72; color: white; }
+        .btn-help { background: #fdcb6e; color: #333; }
+        .btn-levels { background: #6c5ce7; color: white; }
+        .btn.active { box-shadow: 0 0 20px currentColor; transform: scale(1.05); }
+        
+        #instruction {
+            position: absolute; top: 65px; left: 50%; transform: translateX(-50%);
+            background: rgba(0,0,0,0.8); color: white; padding: 10px 22px;
+            border-radius: 25px; font-size: 14px; text-align: center;
+            border: 1px solid #0984e3; max-width: 90%; z-index: 10;
+        }
+        #instruction .hl { color: #00d2ff; font-weight: bold; }
+        #instruction .warn { color: #ff6b6b; font-weight: bold; }
+        
+        #tutorial {
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.95); z-index: 100;
+            display: flex; justify-content: center; align-items: center;
+        }
+        #tutorial.hidden { display: none; }
+        .tut-box {
+            background: #1a1a2e; border: 2px solid #0984e3;
+            border-radius: 15px; padding: 30px; max-width: 480px;
+            text-align: center; color: white; width: 90%;
+        }
+        .tut-box h2 { color: #00d2ff; margin-bottom: 18px; }
+        .tut-step {
+            display: flex; align-items: center; gap: 12px;
+            margin: 14px 0; text-align: left; padding: 10px;
+            background: rgba(255,255,255,0.05); border-radius: 8px;
+        }
+        .tut-num {
+            width: 36px; height: 36px; border-radius: 50%;
+            background: #0984e3; display: flex; align-items: center;
+            justify-content: center; font-weight: bold; flex-shrink: 0;
+        }
+        .tut-text { font-size: 14px; line-height: 1.4; }
+        .tut-text strong { color: #00d2ff; }
+        .tut-btn {
+            margin-top: 18px; padding: 12px 35px; background: #00b894;
+            color: white; border: none; border-radius: 8px;
+            font-size: 15px; cursor: pointer; font-weight: bold;
+        }
+        
+        #modal {
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.9); z-index: 100;
+            display: none; justify-content: center; align-items: center;
+        }
+        #modal.visible { display: flex; }
+        .modal-box {
+            background: #1a1a2e; border: 2px solid #0984e3;
+            border-radius: 15px; padding: 30px; text-align: center;
+            max-width: 380px; width: 90%; color: white;
+        }
+        .modal-box h1 { color: #00d2ff; margin-bottom: 12px; font-size: 22px; }
+        .modal-box p { color: #aaa; margin-bottom: 18px; line-height: 1.5; }
+        .modal-box button {
+            padding: 12px 28px; background: #0984e3; color: white;
+            border: none; border-radius: 8px; font-size: 15px; cursor: pointer;
+        }
+        
+        #level-select {
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.95); z-index: 100;
+            display: none; justify-content: center; align-items: center;
+            flex-direction: column; gap: 18px;
+        }
+        #level-select.visible { display: flex; }
+        #level-select h2 { color: white; }
+        .levels-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; }
+        .lvl-btn {
+            width: 60px; height: 60px; border-radius: 10px;
+            border: 2px solid #333; background: #1a1a2e; color: white;
+            font-size: 18px; font-weight: bold; cursor: pointer;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+        }
+        .lvl-btn:hover { border-color: #0984e3; }
+        .lvl-btn.locked { opacity: 0.3; cursor: not-allowed; }
+        .lvl-btn.done { border-color: #51cf66; }
+        .lvl-stars { font-size: 8px; }
+        .close-x {
+            position: absolute; top: 18px; right: 18px;
+            background: #d63031; color: white; border: none;
+            width: 32px; height: 32px; border-radius: 50%; cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+
+<canvas id="canvas"></canvas>
+
+<div id="top-bar">
+    <div class="stat-box">
+        <div class="stat">
+            <div class="stat-value" id="budget">$15,000</div>
+            <div class="stat-label">💰 Presupuesto</div>
+        </div>
+        <div class="stat">
+            <div class="stat-value" id="beams">0</div>
+            <div class="stat-label">🔩 Vigas</div>
+        </div>
+    </div>
+    <div class="stat-box">
+        <div class="stat">
+            <div class="stat-value" id="level-num">1/10</div>
+            <div class="stat-label">📍 Nivel</div>
+        </div>
+    </div>
+</div>
+
+<div id="instruction">
+    👆 <span class="hl">CLICK</span> en un punto → luego <span class="hl">CLICK</span> en otro = crear viga
+</div>
+
+<div id="bottom-bar">
+    <button class="btn btn-help" onclick="showHint()">💡 AYUDA</button>
+    <button class="btn btn-build active" onclick="setMode('build')">🔨 Construir</button>
+    <button class="btn btn-delete" onclick="setMode('delete')">❌ Borrar</button>
+    <button class="btn btn-test" onclick="startTest()">▶ PROBAR</button>
+    <button class="btn btn-reset" onclick="resetLevel()">↺ Reiniciar</button>
+    <button class="btn btn-levels" onclick="showLevels()">📋</button>
+</div>
+
+<div id="tutorial">
+    <div class="tut-box">
+        <h2>🌉 ¿Cómo Jugar?</h2>
+        <div class="tut-step">
+            <div class="tut-num">1</div>
+            <div class="tut-text"><strong>CLICK</strong> en un punto blanco (se pone verde)</div>
+        </div>
+        <div class="tut-step">
+            <div class="tut-num">2</div>
+            <div class="tut-text"><strong>CLICK</strong> en otro punto → se crea la viga</div>
+        </div>
+        <div class="tut-step">
+            <div class="tut-num">3</div>
+            <div class="tut-text">Conecta puntos para hacer el camino 🚛</div>
+        </div>
+        <div class="tut-step">
+            <div class="tut-num">4</div>
+            <div class="tut-text">Presiona <strong>▶ PROBAR</strong> para enviar el camión</div>
+        </div>
+        <div class="tut-step">
+            <div class="tut-num">💡</div>
+            <div class="tut-text">¿Atascado? Presiona <strong>💡 AYUDA</strong> para ver la solución</div>
+        </div>
+        <button class="tut-btn" onclick="closeTutorial()">¡ENTENDIDO!</button>
+    </div>
+</div>
+
+<div id="modal">
+    <div class="modal-box">
+        <h1 id="m-title">¡Completado!</h1>
+        <p id="m-text"></p>
+        <button onclick="modalAction()">Continuar</button>
+    </div>
+</div>
+
+<div id="level-select">
+    <button class="close-x" onclick="hideLevels()">✕</button>
+    <h2>📋 Niveles</h2>
+    <div class="levels-grid" id="lvl-grid"></div>
+</div>
+
+<script>
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
+
+let progress = JSON.parse(localStorage.getItem('bp3')) || { unlocked: 1, stars: {} };
+
+let game = {
+    mode: 'build',
+    level: 0,
+    budget: 0,
+    nodes: [],
+    beams: [],
+    truck: null,
+    selected: null,
+    mouse: { x: 0, y: 0 },
+    testing: false,
+    showHints: false,
+    hintTimer: 0
+};
+
+const LEVELS = [
+    {
+        name: "Primer Puente",
+        budget: 15000,
+        nodes: [{x:0.2,y:0.6},{x:0.5,y:0.6},{x:0.8,y:0.6}],
+        solution: [[0,1],[1,2]],
+        hint: "Conecta 1→2→3 en línea recta"
+    },
+    {
+        name: "Valle",
+        budget: 22000,
+        nodes: [{x:0.15,y:0.5},{x:0.4,y:0.65},{x:0.6,y:0.65},{x:0.85,y:0.5}],
+        solution: [[0,1],[1,2],[2,3],[0,2],[1,3]],
+        hint: "Conecta en línea + diagonales para triángulos"
+    },
+    {
+        name: "Tres Tramos",
+        budget: 25000,
+        nodes: [{x:0.1,y:0.55},{x:0.35,y:0.55},{x:0.65,y:0.55},{x:0.9,y:0.55}],
+        solution: [[0,1],[1,2],[2,3]],
+        hint: "Conecta 1→2→3→4 en línea"
+    },
+    {
+        name: "Con Refuerzos",
+        budget: 30000,
+        nodes: [{x:0.1,y:0.5},{x:0.35,y:0.6},{x:0.65,y:0.6},{x:0.9,y:0.5}],
+        solution: [[0,1],[1,2],[2,3],[0,2],[1,3]],
+        hint: "Línea principal + diagonales cruzadas"
+    },
+    {
+        name: "Puente Alto",
+        budget: 35000,
+        nodes: [{x:0.1,y:0.45},{x:0.3,y:0.6},{x:0.5,y:0.65},{x:0.7,y:0.6},{x:0.9,y:0.45}],
+        solution: [[0,1],[1,2],[2,3],[3,4],[0,2],[2,4]],
+        hint: "Línea + refuerzos al centro"
+    },
+    {
+        name: "Zigzag",
+        budget: 30000,
+        nodes: [{x:0.1,y:0.5},{x:0.3,y:0.6},{x:0.5,y:0.5},{x:0.7,y:0.6},{x:0.9,y:0.5}],
+        solution: [[0,1],[1,2],[2,3],[3,4]],
+        hint: "Conecta cada punto con el siguiente"
+    },
+    {
+        name: "Doble Soporte",
+        budget: 40000,
+        nodes: [{x:0.1,y:0.5},{x:0.3,y:0.65},{x:0.5,y:0.5},{x:0.7,y:0.65},{x:0.9,y:0.5}],
+        solution: [[0,1],[1,2],[2,3],[3,4],[0,2],[2,4]],
+        hint: "Zigzag + conecta al punto central"
+    },
+    {
+        name: "Gran Valle",
+        budget: 45000,
+        nodes: [{x:0.05,y:0.45},{x:0.25,y:0.6},{x:0.5,y:0.7},{x:0.75,y:0.6},{x:0.95,y:0.45}],
+        solution: [[0,1],[1,2],[2,3],[3,4],[0,2],[1,3],[2,4]],
+        hint: "Línea + todas las diagonales"
+    },
+    {
+        name: "Escalera",
+        budget: 35000,
+        nodes: [{x:0.1,y:0.45},{x:0.3,y:0.55},{x:0.5,y:0.45},{x:0.7,y:0.55},{x:0.9,y:0.45}],
+        solution: [[0,1],[1,2],[2,3],[3,4],[0,2],[2,4]],
+        hint: "Escalera + refuerzos al centro"
+    },
+    {
+        name: "Desafío Final",
+        budget: 50000,
+        nodes: [{x:0.05,y:0.5},{x:0.2,y:0.6},{x:0.4,y:0.45},{x:0.6,y:0.6},{x:0.8,y:0.45},{x:0.95,y:0.55}],
+        solution: [[0,1],[1,2],[2,3],[3,4],[4,5],[0,2],[2,4],[1,3],[3,5]],
+        hint: "Línea + todas las diagonales posibles"
+    }
+];
+
+function getPos(node) {
+    return { x: node.x * canvas.width, y: node.y * canvas.height };
+}
+
+function loadLevel(idx) {
+    game.level = idx;
+    game.budget = LEVELS[idx].budget;
+    game.nodes = LEVELS[idx].nodes.map(n => ({...n}));
+    game.beams = [];
+    game.truck = null;
+    game.testing = false;
+    game.selected = null;
+    game.showHints = false;
+    game.mode = 'build';
+    updateUI();
+    setMode('build');
+    hideLevels();
+    setInstruction(`Nivel ${idx+1}: ${LEVELS[idx].name}`);
+}
+
+function resetLevel() { loadLevel(game.level); }
+
+function setMode(mode) {
+    game.mode = mode;
+    game.selected = null;
+    document.querySelectorAll('.btn').forEach(b => b.classList.remove('active'));
+    if (mode === 'build') document.querySelector('.btn-build').classList.add('active');
+    if (mode === 'delete') document.querySelector('.btn-delete').classList.add('active');
+}
+
+function setInstruction(text) {
+    document.getElementById('instruction').innerHTML = text;
+}
+
+function showHint() {
+    game.showHints = true;
+    game.hintTimer = 300; // 5 segundos a 60fps
+    const lvl = LEVELS[game.level];
+    setInstruction(`💡 <span class="hl">${lvl.hint}</span>`);
+}
+
+function findNode(x, y) {
+    for (let i = 0; i < game.nodes.length; i++) {
+        const pos = getPos(game.nodes[i]);
+        if (Math.hypot(pos.x - x, pos.y - y) < 45) return i;
+    }
+    return -1;
+}
+
+function handleClick(x, y) {
+    if (game.testing) return;
+    
+    if (game.mode === 'build') {
+        const idx = findNode(x, y);
+        if (idx === -1) { game.selected = null; return; }
+        
+        if (game.selected === null) {
+            game.selected = idx;
+            setInstruction(`✅ Punto ${idx+1} seleccionado. Ahora CLICK en otro punto.`);
+        } else if (game.selected === idx) {
+            game.selected = null;
+        } else {
+            createBeam(game.selected, idx);
+            game.selected = null;
+        }
+    } else if (game.mode === 'delete') {
+        deleteBeam(x, y);
+    }
+}
+
+function createBeam(a, b) {
+    const exists = game.beams.some(beam => 
+        (beam.a === a && beam.b === b) || (beam.a === b && beam.b === a)
+    );
+    if (exists) { setInstruction('⚠️ <span class="warn">Esa viga ya existe.</span>'); return; }
+    
+    const p1 = getPos(game.nodes[a]);
+    const p2 = getPos(game.nodes[b]);
+    const len = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+    const cost = Math.floor(len * 4);
+    
+    if (game.budget < cost) {
+        setInstruction(`⚠️ <span class="warn">Sin presupuesto.</span> Necesitas $${cost}.`);
+        return;
+    }
+    
+    game.beams.push({ a, b, len, stress: 0 });
+    game.budget -= cost;
+    updateUI();
+    setInstruction(`✅ ¡Viga creada! (-$${cost})`);
+}
+
+function deleteBeam(x, y) {
+    for (let i = game.beams.length - 1; i >= 0; i--) {
+        const beam = game.beams[i];
+        const p1 = getPos(game.nodes[beam.a]);
+        const p2 = getPos(game.nodes[beam.b]);
+        const dx = p2.x - p1.x, dy = p2.y - p1.y;
+        const lenSq = dx*dx + dy*dy;
+        if (lenSq === 0) continue;
+        let t = Math.max(0, Math.min(1, ((x-p1.x)*dx + (y-p1.y)*dy) / lenSq));
+        const px = p1.x + t*dx, py = p1.y + t*dy;
+        if (Math.hypot(x - px, y - py) < 25) {
+            const refund = Math.floor(beam.len * 4 * 0.7);
+            game.budget += refund;
+            game.beams.splice(i, 1);
+            updateUI();
+            setInstruction(`🗑️ Viga borrada. +$${refund}`);
+            return;
+        }
+    }
+}
+
+// ===== SIMULACIÓN CORREGIDA =====
+
+function startTest() {
+    if (game.beams.length === 0) {
+        setInstruction('⚠️ <span class="warn">¡Construye vigas primero!</span> Presiona 💡 AYUDA.');
+        return;
+    }
+    
+    game.testing = true;
+    game.selected = null;
+    setInstruction('🚛 <span class="hl">El camión avanza suavemente...</span>');
+    
+    // ✅ CORRECCIÓN: El camión empieza EXACTAMENTE en el primer nodo
+    const start = getPos(game.nodes[0]);
+    game.truck = {
+        x: start.x,           // Empieza EN el nodo, no antes
+        y: start.y - 28,      // Ya apoyado sobre el puente
+        vx: 1.5,              // Velocidad suave
+        vy: 0,                // Sin velocidad vertical
+        started: false        // Flag para inicio suave
+    };
+}
+
+function updateTruck() {
+    if (!game.truck || !game.testing) return;
+    
+    const t = game.truck;
+    
+    // ✅ Inicio suave: el camión "aparece" ya en el puente
+    if (!t.started) {
+        t.started = true;
+        // Asegurar que empieza apoyado
+        const start = getPos(game.nodes[0]);
+        t.y = start.y - 28;
+        t.vy = 0;
+    }
+    
+    // Gravedad suave
+    t.vy += 0.3;
+    t.x += t.vx;
+    t.y += t.vy;
+    
+    let onGround = false;
+    
+    // Colisión con vigas
+    for (let beam of game.beams) {
+        const p1 = getPos(game.nodes[beam.a]);
+        const p2 = getPos(game.nodes[beam.b]);
+        const minX = Math.min(p1.x, p2.x);
+        const maxX = Math.max(p1.x, p2.x);
+        
+        for (let off of [-15, 0, 15]) {
+            const cx = t.x + off;
+            if (cx >= minX && cx <= maxX && p2.x !== p1.x) {
+                const tt = (cx - p1.x) / (p2.x - p1.x);
+                const by = p1.y + tt * (p2.y - p1.y);
+                
+                if (t.y + 28 >= by - 12 && t.y + 28 <= by + 20) {
+                    t.y = by - 28;
+                    t.vy = Math.min(0, t.vy);
+                    onGround = true;
+                    beam.stress = Math.min(100, beam.stress + 1);
+                }
+            }
+        }
+    }
+    
+    // También permitir que el camión se apoye en el nodo inicial directamente
+    const startNode = getPos(game.nodes[0]);
+    if (t.x < startNode.x + 30 && t.y + 28 >= startNode.y - 10) {
+        t.y = startNode.y - 28;
+        t.vy = 0;
+        onGround = true;
+    }
+    
+    // Meta
+    const end = getPos(game.nodes[game.nodes.length - 1]);
+    if (t.x > end.x + 50) levelComplete();
+    
+    // Caída
+    if (t.y > canvas.height + 80) levelFailed();
+}
+
+function levelComplete() {
+    game.testing = false;
+    game.truck = null;
+    const eff = game.budget / LEVELS[game.level].budget;
+    let stars = 1;
+    if (eff > 0.3) stars = 2;
+    if (eff > 0.5) stars = 3;
+    
+    progress.stars[game.level] = Math.max(progress.stars[game.level] || 0, stars);
+    progress.unlocked = Math.max(progress.unlocked, game.level + 2);
+    localStorage.setItem('bp3', JSON.stringify(progress));
+    
+    document.getElementById('m-title').innerText = '🎉 ¡PUENTE COMPLETADO!';
+    document.getElementById('m-text').innerHTML = `${'⭐'.repeat(stars)}${'☆'.repeat(3-stars)}<br>Sobraron: $${game.budget}`;
+    document.getElementById('modal').classList.add('visible');
+}
+
+function levelFailed() {
+    game.testing = false;
+    game.truck = null;
+    document.getElementById('m-title').innerText = '💥 ¡Se cayó!';
+    document.getElementById('m-text').innerHTML = 'Consejo: Usa <strong>💡 AYUDA</strong> para ver la solución.<br>Los triángulos hacen puentes más fuertes.';
+    document.getElementById('modal').classList.add('visible');
+}
+
+function modalAction() {
+    document.getElementById('modal').classList.remove('visible');
+    if (document.getElementById('m-title').innerText.includes('COMPLETADO')) {
+        if (game.level < 9) loadLevel(game.level + 1);
+        else showLevels();
+    } else {
+        resetLevel();
+    }
+}
+
+// ===== RENDERIZADO =====
+
+function draw() {
+    // Fondo
+    const grad = ctx.createLinearGradient(0, 0, 0, canvas.height);
+    grad.addColorStop(0, '#1a1a3e');
+    grad.addColorStop(1, '#0f0f2a');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    
+    // Agua
+    ctx.fillStyle = 'rgba(30, 100, 180, 0.2)';
+    ctx.fillRect(0, canvas.height * 0.82, canvas.width, canvas.height * 0.18);
+    
+    // Suelo
+    ctx.fillStyle = '#2d3436';
+    ctx.fillRect(0, canvas.height * 0.78, canvas.width, canvas.height * 0.22);
+    
+    // ✅ PLATAFORMA DE INICIO (rampa visible)
+    const startPos = getPos(game.nodes[0]);
+    const endPos = getPos(game.nodes[game.nodes.length - 1]);
+    
+    // Plataforma inicio
+    ctx.fillStyle = '#3d4d50';
+    ctx.fillRect(0, startPos.y - 5, startPos.x + 20, 15);
+    ctx.fillStyle = '#4a5d60';
+    ctx.fillRect(0, startPos.y - 5, startPos.x + 20, 5);
+    
+    // Plataforma meta
+    ctx.fillStyle = '#3d4d50';
+    ctx.fillRect(endPos.x - 20, endPos.y - 5, canvas.width - endPos.x + 20, 15);
+    ctx.fillStyle = '#4a5d60';
+    ctx.fillRect(endPos.x - 20, endPos.y - 5, canvas.width - endPos.x + 20, 5);
+    
+    // Vigas sugeridas (ayuda)
+    if (game.showHints && game.hintTimer > 0) {
+        game.hintTimer--;
+        ctx.setLineDash([8, 6]);
+        ctx.strokeStyle = 'rgba(253, 203, 110, 0.7)';
+        ctx.lineWidth = 5;
+        LEVELS[game.level].solution.forEach(([a, b]) => {
+            const p1 = getPos(game.nodes[a]);
+            const p2 = getPos(game.nodes[b]);
+            ctx.beginPath();
+            ctx.moveTo(p1.x, p1.y);
+            ctx.lineTo(p2.x, p2.y);
+            ctx.stroke();
+        });
+        ctx.setLineDash([]);
+        
+        if (game.hintTimer <= 0) game.showHints = false;
+    }
+    
+    // Vigas construidas
+    game.beams.forEach(beam => {
+        const p1 = getPos(game.nodes[beam.a]);
+        const p2 = getPos(game.nodes[beam.b]);
+        
+        let color = '#74b9ff';
+        if (beam.stress > 30) color = '#fdcb6e';
+        if (beam.stress > 60) color = '#ff6b6b';
+        
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 8;
+        ctx.lineCap = 'round';
+        ctx.shadowColor = color;
+        ctx.shadowBlur = 5;
+        ctx.beginPath();
+        ctx.moveTo(p1.x, p1.y);
+        ctx.lineTo(p2.x, p2.y);
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+        
+        beam.stress *= 0.97;
+    });
+    
+    // Línea preview
+    if (game.selected !== null && game.mode === 'build') {
+        const p = getPos(game.nodes[game.selected]);
+        ctx.strokeStyle = 'rgba(0, 255, 136, 0.6)';
+        ctx.lineWidth = 3;
+        ctx.setLineDash([8, 5]);
+        ctx.beginPath();
+        ctx.moveTo(p.x, p.y);
+        ctx.lineTo(game.mouse.x, game.mouse.y);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        
+        const dist = Math.hypot(game.mouse.x - p.x, game.mouse.y - p.y);
+        const cost = Math.floor(dist * 4);
+        ctx.fillStyle = game.budget >= cost ? '#51cf66' : '#ff6b6b';
+        ctx.font = 'bold 15px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText(`$${cost}`, game.mouse.x, game.mouse.y - 18);
+    }
+    
+    // Nodos
+    game.nodes.forEach((node, i) => {
+        const pos = getPos(node);
+        const isSel = game.selected === i;
+        
+        if (isSel) { ctx.shadowColor = '#00ff88'; ctx.shadowBlur = 20; }
+        
+        ctx.fillStyle = isSel ? '#00ff88' : '#ffffff';
+        ctx.beginPath();
+        ctx.arc(pos.x, pos.y, isSel ? 17 : 13, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+        
+        ctx.strokeStyle = isSel ? '#00ff88' : '#0984e3';
+        ctx.lineWidth = 3;
+        ctx.stroke();
+        
+        ctx.fillStyle = isSel ? '#005533' : '#0984e3';
+        ctx.font = 'bold 13px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(i + 1, pos.x, pos.y);
+        
+        if (isSel) {
+            ctx.strokeStyle = 'rgba(0,255,136,0.4)';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(pos.x, pos.y, 24 + Math.sin(Date.now() * 0.005) * 3, 0, Math.PI * 2);
+            ctx.stroke();
+        }
+    });
+    
+    // Etiquetas
+    ctx.font = 'bold 13px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#51cf66';
+    ctx.fillText('🚛 INICIO', startPos.x, startPos.y - 35);
+    ctx.fillStyle = '#ffd93d';
+    ctx.fillText('🏁 META', endPos.x, endPos.y - 35);
+    
+    // Camión
+    if (game.truck) {
+        const t = game.truck;
+        ctx.save();
+        ctx.translate(t.x, t.y);
+        
+        // Sombra
+        ctx.fillStyle = 'rgba(0,0,0,0.2)';
+        ctx.fillRect(-25, 30, 50, 4);
+        
+        // Cuerpo
+        ctx.fillStyle = '#e17055';
+        ctx.fillRect(-25, 0, 50, 24);
+        
+        // Cabina
+        ctx.fillStyle = '#fab1a0';
+        ctx.fillRect(15, -12, 15, 14);
+        
+        // Ventana
+        ctx.fillStyle = '#74b9ff';
+        ctx.fillRect(18, -9, 9, 7);
+        
+        // Ruedas
+        ctx.fillStyle = '#2d3436';
+        ctx.beginPath();
+        ctx.arc(-14, 24, 8, 0, Math.PI * 2);
+        ctx.arc(14, 24, 8, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Centro ruedas
+        ctx.fillStyle = '#636e72';
+        ctx.beginPath();
+        ctx.arc(-14, 24, 3, 0, Math.PI * 2);
+        ctx.arc(14, 24, 3, 0, Math.PI * 2);
+        ctx.fill();
+        
+        ctx.restore();
+    }
+}
+
+function updateUI() {
+    document.getElementById('budget').innerText = `$${game.budget.toLocaleString()}`;
+    document.getElementById('budget').className = 'stat-value' + (game.budget < 2000 ? ' warning' : '');
+    document.getElementById('beams').innerText = game.beams.length;
+    document.getElementById('level-num').innerText = `${game.level + 1}/10`;
+}
+
+function closeTutorial() { document.getElementById('tutorial').classList.add('hidden'); }
+
+function showLevels() {
+    const grid = document.getElementById('lvl-grid');
+    grid.innerHTML = '';
+    LEVELS.forEach((_, i) => {
+        const btn = document.createElement('button');
+        btn.className = 'lvl-btn';
+        if (i >= progress.unlocked) {
+            btn.classList.add('locked');
+            btn.innerHTML = '🔒';
+        } else {
+            if (progress.stars[i]) btn.classList.add('done');
+            const s = progress.stars[i] || 0;
+            btn.innerHTML = `${i+1}<div class="lvl-stars">${'⭐'.repeat(s)}</div>`;
+            btn.onclick = () => loadLevel(i);
+        }
+        grid.appendChild(btn);
+    });
+    document.getElementById('level-select').classList.add('visible');
+}
+
+function hideLevels() { document.getElementById('level-select').classList.remove('visible'); }
+
+// Input
+canvas.addEventListener('click', e => {
+    const r = canvas.getBoundingClientRect();
+    handleClick(e.clientX - r.left, e.clientY - r.top);
+});
+
+canvas.addEventListener('mousemove', e => {
+    const r = canvas.getBoundingClientRect();
+    game.mouse.x = e.clientX - r.left;
+    game.mouse.y = e.clientY - r.top;
+});
+
+canvas.addEventListener('touchstart', e => {
+    e.preventDefault();
+    const r = canvas.getBoundingClientRect();
+    handleClick(e.touches[0].clientX - r.left, e.touches[0].clientY - r.top);
+}, {passive: false});
+
+canvas.addEventListener('touchmove', e => {
+    e.preventDefault();
+    const r = canvas.getBoundingClientRect();
+    game.mouse.x = e.touches[0].clientX - r.left;
+    game.mouse.y = e.touches[0].clientY - r.top;
+}, {passive: false});
+
+window.addEventListener('resize', () => {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+});
+
+// Loop
+function loop() {
+    updateTruck();
+    draw();
+    requestAnimationFrame(loop);
+}
+
+loadLevel(0);
+loop();
+</script>
+</body>
+</html>

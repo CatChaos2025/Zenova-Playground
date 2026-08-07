@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pentago vs IA</title>
+<style>
+    :root { --cell: min(64px, 11vw); }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+        font-family: system-ui, sans-serif;
+        background: #1a1a2e; color: white;
+        min-height: 100vh;
+        display: flex; flex-direction: column; align-items: center;
+        padding: 20px 10px; user-select: none;
+    }
+    h1 { font-size: 1.8rem; letter-spacing: 3px; margin-bottom: 5px; }
+    .subtitle { color: #aaa; font-size: 0.9rem; margin-bottom: 18px; }
+
+    .game-area { display: flex; gap: 25px; flex-wrap: wrap; justify-content: center; align-items: flex-start; }
+
+    /* ====== TABLERO ====== */
+    #board {
+        display: grid; grid-template-columns: auto auto; gap: 12px;
+        padding: 14px; background: #2b2118; border-radius: 14px;
+        box-shadow: 0 10px 30px rgba(0,0,0,.5);
+    }
+    .quad { position: relative; }
+    .grid {
+        display: grid;
+        grid-template-columns: repeat(3, var(--cell));
+        grid-template-rows: repeat(3, var(--cell));
+        gap: 5px; background: #4a3722; padding: 8px; border-radius: 8px;
+    }
+    .cell {
+        border-radius: 50%; background: #2f2418;
+        box-shadow: inset 0 3px 7px rgba(0,0,0,.75);
+        cursor: pointer; position: relative;
+    }
+    .cell:not(.black):not(.white):hover { box-shadow: inset 0 0 0 3px rgba(255,214,10,.45); }
+    .cell.black { background: radial-gradient(circle at 32% 30%, #666, #000 72%); box-shadow: 0 2px 5px rgba(0,0,0,.6); cursor: default; }
+    .cell.white { background: radial-gradient(circle at 32% 30%, #fff, #b9b9b9 78%); box-shadow: 0 2px 5px rgba(0,0,0,.6); cursor: default; }
+    .cell.last::after {
+        content: ''; position: absolute; inset: 0; margin: auto;
+        width: 24%; height: 24%; border-radius: 50%; background: rgba(255,214,10,.9);
+    }
+    .cell.win { box-shadow: 0 0 0 4px #ffd60a, 0 0 16px #ffd60a !important; }
+
+    /* Botones de rotación (aparecen tras colocar canica) */
+    .rot {
+        position: absolute; inset: 8px; display: none;
+        align-items: center; justify-content: center; gap: 12px;
+        background: rgba(0,0,0,.45); border-radius: 8px; z-index: 2;
+    }
+    #board.show-rot .rot { display: flex; }
+    .rot button {
+        width: 46px; height: 46px; border-radius: 50%; border: none;
+        font-size: 24px; font-weight: bold; cursor: pointer;
+        background: #ffd60a; color: #222; transition: transform .15s;
+    }
+    .rot button:hover { transform: scale(1.12); }
+
+    /* ====== PANEL ====== */
+    .panel {
+        background: #16213e; padding: 20px; border-radius: 10px; width: 240px;
+        box-shadow: 0 4px 20px rgba(0,0,0,.4);
+    }
+    .label { color: #aaa; font-size: .75rem; text-transform: uppercase; letter-spacing: 1px; }
+    .value { font-size: 1.05rem; font-weight: bold; margin: 5px 0 15px; min-height: 1.4em; }
+    select, button.action {
+        width: 100%; padding: 10px; margin-top: 6px; border: none;
+        border-radius: 6px; font-size: .95rem; cursor: pointer;
+    }
+    select { background: #ecf0f1; color: #2c3e50; }
+    button.action { background: #e63946; color: white; font-weight: bold; }
+    button.action:hover { filter: brightness(1.15); }
+    .rules { margin-top: 15px; padding-top: 12px; border-top: 1px solid #333; font-size: .8rem; color: #bbb; line-height: 1.6; }
+    .rules b { color: white; }
+</style>
+</head>
+<body>
+
+<h1>⬟ PENTAGO</h1>
+<div class="subtitle">Coloca una canica y gira un cuadrante · 5 en línea para ganar</div>
+
+<div class="game-area">
+    <div id="board"></div>
+
+    <div class="panel">
+        <div class="label">Estado</div>
+        <div id="status" class="value"></div>
+
+        <div class="label">Dificultad IA</div>
+        <select id="difficulty">
+            <option value="easy">Fácil</option>
+            <option value="normal" selected>Normal</option>
+            <option value="hard">Difícil</option>
+        </select>
+        <button class="action" id="resetBtn">Nueva Partida</button>
+
+        <div class="rules">
+            <b>1.</b> Haz clic en un hueco para colocar tu canica <b>negra</b>.<br>
+            <b>2.</b> Pulsa <b>↻</b> o <b>↺</b> sobre el cuadrante que quieras girar.<br>
+            <b>3.</b> Alinea <b>5 canicas</b> para ganar.
+        </div>
+    </div>
+</div>
+
+<script>
+/* ================= ESTADO ================= */
+const HUMAN = 1, AI = 2;
+const BASES = [[0,0],[0,3],[3,0],[3,3]]; // origen de cada cuadrante
+let board, phase, lastPlaced, cellEls, gridEls;
+
+const boardEl = document.getElementById('board');
+const statusEl = document.getElementById('status');
+const diffEl = document.getElementById('difficulty');
+
+/* Todas las ventanas de 5 en línea posibles (32) */
+const WINDOWS = [];
+for (let r=0;r<6;r++) for (let c=0;c<=1;c++) { const w=[]; for(let k=0;k<5;k++) w.push(r*6+c+k); WINDOWS.push(w); }
+for (let c=0;c<6;c++) for (let r=0;r<=1;r++) { const w=[]; for(let k=0;k<5;k++) w.push((r+k)*6+c); WINDOWS.push(w); }
+for (let r=0;r<=1;r++) for (let c=0;c<=1;c++) { const w=[]; for(let k=0;k<5;k++) w.push((r+k)*6+(c+k)); WINDOWS.push(w); }
+for (let r=0;r<=1;r++) for (let c=4;c<=5;c++) { const w=[]; for(let k=0;k<5;k++) w.push((r+k)*6+(c-k)); WINDOWS.push(w); }
+
+/* ================= TABLERO DOM ================= */
+function buildDOM() {
+    boardEl.innerHTML = '';
+    cellEls = new Array(36); gridEls = [];
+    for (let q=0;q<4;q++) {
+        const quad = document.createElement('div'); quad.className = 'quad';
+        const grid = document.createElement('div'); grid.className = 'grid';
+        const [br,bc] = BASES[q];
+        for (let lr=0;lr<3;lr++) for (let lc=0;lc<3;lc++) {
+            const r=br+lr, c=bc+lc;
+            const cell = document.createElement('div'); cell.className = 'cell';
+            cell.addEventListener('click', () => onCellClick(r,c));
+            grid.appendChild(cell); cellEls[r*6+c] = cell;
+        }
+        const rot = document.createElement('div'); rot.className = 'rot';
+        const b1 = document.createElement('button'); b1.type='button'; b1.textContent='↻';
+        b1.addEventListener('click', () => onRotate(q, 1));
+        const b2 = document.createElement('button'); b2.type='button'; b2.textContent='↺';
+        b2.addEventListener('click', () => onRotate(q, -1));
+        rot.append(b1,b2);
+        quad.append(grid, rot);
+        boardEl.appendChild(quad);
+        gridEls.push(grid);
+    }
+}
+
+function render() {
+    for (let i=0;i<36;i++) {
+        cellEls[i].className = 'cell'
+            + (board[i]===HUMAN ? ' black' : board[i]===AI ? ' white' : '')
+            + (i===lastPlaced ? ' last' : '');
+    }
+}
+
+function initGame() {
+    board = new Array(36).fill(0);
+    phase = 'place'; lastPlaced = -1;
+    buildDOM(); render(); updateStatus();
+}
+
+/* ================= FLUJO HUMANO ================= */
+function onCellClick(r,c) {
+    if (phase !== 'place' || board[r*6+c] !== 0) return;
+    board[r*6+c] = HUMAN; lastPlaced = r*6+c;
+    render();
+    phase = 'rotate';
+    boardEl.classList.add('show-rot');
+    updateStatus();
+}
+
+function onRotate(q, dir) {
+    if (phase !== 'rotate') return;
+    phase = 'busy';
+    boardEl.classList.remove('show-rot');
+    animateRotate(q, dir, () => {
+        rotate(board, q, dir);
+        render();
+        finishTurn(HUMAN);
+    });
+}
+
+function animateRotate(q, dir, cb) {
+    const g = gridEls[q];
+    g.style.transition = 'transform .3s ease';
+    g.style.transform = `rotate(${dir*90}deg)`;
+    setTimeout(() => {
+        g.style.transition = 'none'; g.style.transform = 'none';
+        cb();
+    }, 310);
+}
+
+/* ================= FIN DEL TURNO ================= */
+function finishTurn(player) {
+    const res = evaluateEnd();
+    if (res) { gameOver(res); return; }
+    if (player === HUMAN) aiPlay();
+    else { phase = 'place'; updateStatus(); }
+}
+
+function evaluateEnd() {
+    const wH = winningCells(HUMAN), wA = winningCells(AI);
+    if (wH.length && wA.length) return { winner: 0, cells: [...wH, ...wA] };
+    if (wH.length) return { winner: HUMAN, cells: wH };
+    if (wA.length) return { winner: AI, cells: wA };
+    if (board.every(v => v !== 0)) return { winner: 0, cells: [] };
+    return null;
+}
+
+function gameOver(res) {
+    phase = 'over';
+    res.cells.forEach(i => cellEls[i].classList.add('win'));
+    statusEl.textContent = res.winner === HUMAN ? '🎉 ¡Ganaste!'
+                         : res.winner === AI ? '💀 Gana la IA'
+                         : '🤝 Empate';
+}
+
+function updateStatus() {
+    if (phase === 'place')  statusEl.textContent = '⚫ Tu turno: coloca una canica';
+    if (phase === 'rotate') statusEl.textContent = '↻ Ahora gira un cuadrante';
+    if (phase === 'ai')     statusEl.textContent = '🤔 IA pensando...';
+}
+
+/* ================= LÓGICA DE TABLERO ================= */
+function rotate(b, q, dir) {
+    const [br,bc] = BASES[q];
+    const old = b.slice();
+    for (let lr=0;lr<3;lr++) for (let lc=0;lc<3;lc++) {
+        const r=br+lr, c=bc+lc;
+        const sr = dir===1 ? br+(2-lc) : br+lc;
+        const sc = dir===1 ? bc+lr     : bc+(2-lr);
+        b[r*6+c] = old[sr*6+sc];
+    }
+}
+
+function winsOn(b, p) {
+    return WINDOWS.some(w => w.every(i => b[i] === p));
+}
+
+function winningCells(p) {
+    const cells = [];
+    for (const w of WINDOWS) if (w.every(i => board[i] === p)) cells.push(...w);
+    return cells;
+}
+
+/* ================= IA ================= */
+const W_SCORE = [0, 2, 14, 70, 450, 100000];
+const CENTER = [14,15,20,21];
+
+function heuristic(b) {
+    let s = 0;
+    for (const w of WINDOWS) {
+        let h=0, a=0;
+        for (const i of w) { if (b[i]===HUMAN) h++; else if (b[i]===AI) a++; }
+        if (h && a) continue;               // ventana muerta
+        if (a) s += W_SCORE[a];
+        else if (h) s -= W_SCORE[h] * 1.1;  // defensa prioritaria
+    }
+    for (const i of CENTER) { if (b[i]===AI) s += 6; else if (b[i]===HUMAN) s -= 6; }
+    return s;
+}
+
+function allMoves(b) {
+    const moves = [];
+    for (let i=0;i<36;i++) if (b[i]===0)
+        for (let q=0;q<4;q++) for (const dir of [1,-1])
+            moves.push({cell:i, q, dir});
+    return moves;
+}
+
+function applyMove(b, m, p) {
+    const nb = b.slice();
+    nb[m.cell] = p;
+    rotate(nb, m.q, m.dir);
+    return nb;
+}
+
+function hasImmediateWin(b, p) {
+    for (let i=0;i<36;i++) {
+        if (b[i] !== 0) continue;
+        for (let q=0;q<4;q++) for (const dir of [1,-1]) {
+            const nb = b.slice(); nb[i] = p; rotate(nb, q, dir);
+            if (winsOn(nb, p)) return true;
+        }
+    }
+    return false;
+}
+
+function chooseAiMove() {
+    const diff = diffEl.value;
+    const moves = allMoves(board);
+    if (!moves.length) return null;
+
+    // 1) Si puedo ganar ya → lo hago
+    for (const m of moves) if (winsOn(applyMove(board, m, AI), AI)) return m;
+
+    // 2) Puntuar todas las jugadas con heurística + ruido según dificultad
+    const noise = diff==='easy' ? 500 : diff==='normal' ? 60 : 5;
+    const scored = moves.map(m => ({ m, s: heuristic(applyMove(board, m, AI)) + Math.random()*noise }))
+                        .sort((a,b) => b.s - a.s);
+    if (diff === 'easy') return scored[0].m;
+
+    // 3) Evitar jugadas que regalen victoria inmediata al humano
+    const limit = Math.min(scored.length, 30);
+    for (let k=0;k<limit;k++) {
+        if (!hasImmediateWin(applyMove(board, scored[k].m, AI), HUMAN)) return scored[k].m;
+    }
+    return scored[0].m;
+}
+
+function aiPlay() {
+    phase = 'ai'; updateStatus();
+    setTimeout(() => {
+        const mv = chooseAiMove();
+        if (!mv) { finishTurn(AI); return; }
+        board[mv.cell] = AI; lastPlaced = mv.cell;
+        render();
+        setTimeout(() => {
+            animateRotate(mv.q, mv.dir, () => {
+                rotate(board, mv.q, mv.dir);
+                render();
+                finishTurn(AI);
+            });
+        }, 350);
+    }, 450);
+}
+
+/* ================= EVENTOS ================= */
+document.getElementById('resetBtn').addEventListener('click', initGame);
+initGame();
+</script>
+</body>
+</html>

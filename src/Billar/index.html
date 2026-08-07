@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Billar 8-Ball Oficial vs IA</title>
+    <style>
+        :root { --felt: #0a6c03; --wood: #5d3a1a; }
+        * { margin: 0; padding: 0; box-sizing: border-box; user-select: none; }
+        body {
+            background: #111; color: #fff;
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
+            min-height: 100vh; overflow: hidden;
+        }
+        h1 { font-size: 22px; letter-spacing: 4px; margin-bottom: 5px; opacity: 0.9; }
+        
+        #ui {
+            display: flex; gap: 15px; margin-bottom: 8px;
+            font-size: 14px; align-items: center; flex-wrap: wrap; justify-content: center;
+        }
+        .player-box {
+            padding: 6px 12px; border-radius: 6px;
+            border: 2px solid transparent; text-align: center; min-width: 120px;
+        }
+        .player-box.active { border-color: #fff; background: rgba(255,255,255,0.1); }
+        .group-badge {
+            display: inline-block; padding: 2px 8px; border-radius: 3px;
+            font-size: 10px; font-weight: bold; margin-top: 3px; letter-spacing: 1px;
+        }
+        .grp-solids { background: #e6b800; color: #000; }
+        .grp-stripes { background: #fff; color: #000; border: 2px dashed #000; }
+        .grp-none { background: #555; color: #aaa; }
+        
+        canvas {
+            background: var(--felt);
+            border: 18px solid var(--wood);
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.6), inset 0 0 60px rgba(0,0,0,0.3);
+            cursor: crosshair; touch-action: none;
+        }
+        #power-bar-container {
+            width: 300px; height: 12px;
+            background: #333; border-radius: 6px;
+            margin-top: 10px; overflow: hidden; border: 1px solid #555;
+        }
+        #power-bar {
+            height: 100%; width: 0%;
+            background: linear-gradient(90deg, #0f0, #ff0, #f00);
+            transition: width 0.05s linear;
+        }
+        #status-msg {
+            margin-top: 6px; font-size: 13px; min-height: 18px;
+            color: #ffeb3b; letter-spacing: 1px;
+        }
+        .controls { margin-top: 4px; font-size: 11px; opacity: 0.4; }
+        
+        #msg-overlay {
+            position: absolute; top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0,0,0,0.92); padding: 30px 50px;
+            border-radius: 10px; border: 2px solid #fff;
+            text-align: center; display: none; z-index: 10;
+        }
+        #msg-overlay button {
+            margin-top: 15px; padding: 10px 30px; font-size: 16px;
+            cursor: pointer; background: var(--felt); color: #fff;
+            border: 1px solid #fff; border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <h1>🎱 BILLAR 8-BALL OFICIAL</h1>
+    
+    <div id="ui">
+        <div class="player-box active" id="box-player">
+            👤 TÚ <span id="p-score-num"></span>
+            <br><span class="group-badge grp-none" id="p-group">SIN ASIGNAR</span>
+        </div>
+        <div style="font-size:20px; font-weight:bold;">VS</div>
+        <div class="player-box" id="box-cpu">
+            🤖 CPU <span id="c-score-num"></span>
+            <br><span class="group-badge grp-none" id="c-group">SIN ASIGNAR</span>
+        </div>
+    </div>
+
+    <canvas id="table" width="900" height="450"></canvas>
+    <div id="power-bar-container"><div id="power-bar"></div></div>
+    <div id="status-msg">Tu turno. Apunta y dispara.</div>
+    <div class="controls">MOUSE para apuntar · CLICK mantenido para cargar · SOLTAR para tirar</div>
+
+    <div id="msg-overlay">
+        <h2 id="ov-title"></h2>
+        <p id="ov-sub"></p>
+        <button onclick="resetGame()">NUEVA PARTIDA</button>
+    </div>
+
+<script>
+const canvas = document.getElementById('table');
+const ctx = canvas.getContext('2d');
+const W = canvas.width, H = canvas.height;
+
+// ─── Constantes Físicas ──────────────────────────────────────
+const BALL_R = 12;
+const FRICTION = 0.985;
+const MIN_SPEED = 0.08;
+const MAX_POWER = 25;
+const CUSHION = 28;
+const POCKET_R = 22;
+const CPU_DELAY = 1200;
+const CPU_ERROR = 0.04;
+
+const POCKETS = [
+    {x:CUSHION,y:CUSHION},{x:W/2,y:CUSHION-4},{x:W-CUSHION,y:CUSHION},
+    {x:CUSHION,y:H-CUSHION},{x:W/2,y:H-CUSHION+4},{x:W-CUSHION,y:H-CUSHION}
+];
+
+const BALL_COLORS = [
+    '#fff','#e6b800','#0055cc','#cc0000','#6600cc','#ff6600','#006633','#800000',
+    '#000','#e6b800','#0055cc','#cc0000','#6600cc','#ff6600','#006633','#800000'
+];
+
+// ─── Estado del Juego ────────────────────────────────────────
+let balls = [], cueBall;
+let currentTurn = 'player'; // 'player' | 'cpu'
+let playerGroup = null;   // 'solids' | 'stripes' | null
+let cpuGroup = null;      // 'solids' | 'stripes' | null
+let tableOpen = true;     // Mesa abierta hasta primera bola legal
+let aiming = true, charging = false, power = 0, powerDir = 1;
+let mouseX = 0, mouseY = 0;
+let animId;
+
+// Tracking del tiro actual
+let firstHitBall = null;  // Primera bola golpeada por la blanca
+let pottedThisShot = [];  // Bolas embocadas en este tiro
+let cuePotted = false;
+
+// ─── Clase Ball ──────────────────────────────────────────────
+class Ball {
+    constructor(x, y, number) {
+        this.x = x; this.y = y; this.vx = 0; this.vy = 0;
+        this.number = number; this.active = true;
+        this.color = BALL_COLORS[number];
+        this.isCue = number === 0;
+        this.isBlack = number === 8;
+        this.isSolid = number >= 1 && number <= 7;
+        this.isStripe = number >= 9 && number <= 15;
+    }
+    
+    getGroup() {
+        if (this.isSolid) return 'solids';
+        if (this.isStripe) return 'stripes';
+        return null;
+    }
+
+    update() {
+        if (!this.active) return;
+        this.x += this.vx; this.y += this.vy;
+        this.vx *= FRICTION; this.vy *= FRICTION;
+        if (Math.abs(this.vx) < MIN_SPEED) this.vx = 0;
+        if (Math.abs(this.vy) < MIN_SPEED) this.vy = 0;
+        
+        // Bandas
+        if (this.x-BALL_R < CUSHION) { this.x=CUSHION+BALL_R; this.vx*=-0.9; }
+        if (this.x+BALL_R > W-CUSHION) { this.x=W-CUSHION-BALL_R; this.vx*=-0.9; }
+        if (this.y-BALL_R < CUSHION) { this.y=CUSHION+BALL_R; this.vy*=-0.9; }
+        if (this.y+BALL_R > H-CUSHION) { this.y=H-CUSHION-BALL_R; this.vy*=-0.9; }
+        
+        // Troneras
+        for (const p of POCKETS) {
+            const dx=this.x-p.x, dy=this.y-p.y;
+            if (dx*dx+dy*dy < POCKET_R*POCKET_R) { this.pot(); break; }
+        }
+    }
+
+    pot() {
+        this.active = false; this.vx=0; this.vy=0;
+        if (this.isCue) {
+            cuePotted = true;
+            setTimeout(() => {
+                this.x=W*0.25; this.y=H/2; this.vx=0; this.vy=0; this.active=true;
+            }, 500);
+        } else {
+            pottedThisShot.push(this);
+        }
+    }
+
+    draw() {
+        if (!this.active) return;
+        // Sombra
+        ctx.fillStyle='rgba(0,0,0,0.3)';
+        ctx.beginPath(); ctx.arc(this.x+2,this.y+2,BALL_R,0,Math.PI*2); ctx.fill();
+        // Cuerpo
+        ctx.fillStyle=this.color;
+        ctx.beginPath(); ctx.arc(this.x,this.y,BALL_R,0,Math.PI*2); ctx.fill();
+        // Franja rayada
+        if (this.isStripe) {
+            ctx.fillStyle='#fff';
+            ctx.beginPath(); ctx.arc(this.x,this.y,BALL_R*0.6,0,Math.PI*2); ctx.fill();
+        }
+        // Número
+        if (!this.isCue) {
+            ctx.fillStyle = this.isStripe ? '#000' : (this.isBlack?'#fff':'#fff');
+            ctx.font='bold 9px Arial'; ctx.textAlign='center'; ctx.textBaseline='middle';
+            ctx.fillText(this.number, this.x, this.y);
+        }
+        // Brillo
+        ctx.fillStyle='rgba(255,255,255,0.4)';
+        ctx.beginPath(); ctx.arc(this.x-3,this.y-3,BALL_R*0.3,0,Math.PI*2); ctx.fill();
+    }
+}
+
+// ─── Colisiones con tracking de primer impacto ───────────────
+function resolveCollisions() {
+    for (let i=0; i<balls.length; i++) {
+        for (let j=i+1; j<balls.length; j++) {
+            const a=balls[i], b=balls[j];
+            if (!a.active || !b.active) continue;
+            const dx=b.x-a.x, dy=b.y-a.y;
+            const dist=Math.sqrt(dx*dx+dy*dy);
+            if (dist < BALL_R*2) {
+                // Registrar primer impacto de la blanca
+                if (firstHitBall === null) {
+                    if (a.isCue && !b.isCue) firstHitBall = b;
+                    else if (b.isCue && !a.isCue) firstHitBall = a;
+                }
+                
+                const nx=dx/dist, ny=dy/dist;
+                const overlap=BALL_R*2-dist;
+                a.x-=nx*overlap*0.5; a.y-=ny*overlap*0.5;
+                b.x+=nx*overlap*0.5; b.y+=ny*overlap*0.5;
+                const dvx=a.vx-b.vx, dvy=a.vy-b.vy;
+                const dot=dvx*nx+dvy*ny;
+                if (dot>0) {
+                    a.vx-=dot*nx; a.vy-=dot*ny;
+                    b.vx+=dot*nx; b.vy+=dot*ny;
+                }
+            }
+        }
+    }
+}
+
+// ─── Evaluación del Tiro (Reglas Oficiales) ──────────────────
+function evaluateShot() {
+    let foul = false;
+    let foulReason = '';
+    let turnContinues = false;
+    const shooter = currentTurn;
+    const myGroup = shooter === 'player' ? playerGroup : cpuGroup;
+    
+    // 1. Blanca embocada = falta
+    if (cuePotted) {
+        foul = true;
+        foulReason = '¡Blanca embocada!';
+    }
+    
+    // 2. No tocó ninguna bola = falta
+    if (!foul && firstHitBall === null) {
+        foul = true;
+        foulReason = '¡No tocó ninguna bola!';
+    }
+    
+    // 3. Tocó bola incorrecta primero (si hay grupos asignados)
+    if (!foul && !tableOpen && myGroup && firstHitBall) {
+        const hitGroup = firstHitBall.getGroup();
+        // ¿Quedan bolas de mi grupo?
+        const myBallsLeft = balls.filter(b => b.active && !b.isCue && !b.isBlack && b.getGroup() === myGroup).length;
+        
+        if (myBallsLeft > 0) {
+            // Debe tocar su grupo primero
+            if (hitGroup !== myGroup && !firstHitBall.isBlack) {
+                foul = true;
+                foulReason = '¡Tocó bola del rival primero!';
+            }
+        } else {
+            // Ya limpió su grupo, debe tocar la negra
+            if (!firstHitBall.isBlack) {
+                foul = true;
+                foulReason = '¡Debe tocar la negra!';
+            }
+        }
+    }
+    
+    // 4. Verificar bolas embocadas
+    const blackPotted = pottedThisShot.some(b => b.isBlack);
+    const legalPotted = pottedThisShot.filter(b => !b.isBlack && !b.isCue);
+    
+    // Negra embocada
+    if (blackPotted) {
+        const myBallsLeft = balls.filter(b => b.active && !b.isCue && !b.isBlack && b.getGroup() === myGroup).length;
+        if (foul || myBallsLeft > 0 || tableOpen) {
+            endGame(shooter === 'player' ? 'cpu' : 'player', 'Negra embocada ilegalmente');
+            return;
+        } else {
+            endGame(shooter, '¡Partida ganada legalmente!');
+            return;
+        }
+    }
+    
+    // 5. Asignación de grupos (mesa abierta)
+    if (tableOpen && !foul && legalPotted.length > 0) {
+        const firstPotted = legalPotted[0];
+        const assignedGroup = firstPotted.getGroup();
+        if (assignedGroup) {
+            tableOpen = false;
+            if (shooter === 'player') {
+                playerGroup = assignedGroup;
+                cpuGroup = assignedGroup === 'solids' ? 'stripes' : 'solids';
+            } else {
+                cpuGroup = assignedGroup;
+                playerGroup = assignedGroup === 'solids' ? 'stripes' : 'solids';
+            }
+            setStatus(`Grupos asignados: Tú → ${playerGroup==='solids'?'LISAS':'RAYADAS'}`);
+        }
+    }
+    
+    // 6. ¿Continúa turno?
+    if (!foul && legalPotted.length > 0) {
+        const effectiveGroup = tableOpen ? null : myGroup;
+        if (tableOpen) {
+            turnContinues = true; // Mesa abierta: cualquier bola vale
+        } else {
+            // Al menos una bola embocada debe ser de su grupo
+            turnContinues = legalPotted.some(b => b.getGroup() === effectiveGroup);
+        }
+    }
+    
+    // Aplicar resultado
+    if (foul) {
+        setStatus(foulReason + ' Falta → Cambio de turno');
+        switchTurn(true); // Forzar cambio
+    } else if (turnContinues) {
+        setStatus(legalPotted.length > 0 ? '¡Bien! Sigues tirando.' : 'Mesa abierta, sigues.');
+        resetShotTracking();
+        if (currentTurn === 'cpu') setTimeout(cpuThink, CPU_DELAY);
+    } else {
+        switchTurn(false);
+    }
+    
+    updateGroupUI();
+}
+
+function resetShotTracking() {
+    firstHitBall = null;
+    pottedThisShot = [];
+    cuePotted = false;
+}
+
+function switchTurn(forced) {
+    currentTurn = currentTurn === 'player' ? 'cpu' : 'player';
+    resetShotTracking();
+    updateTurnUI();
+    if (!forced && currentTurn === 'player') {
+        setStatus('Tu turno.');
+    }
+    if (currentTurn === 'cpu') {
+        setStatus('CPU pensando...');
+        setTimeout(cpuThink, CPU_DELAY);
+    }
+}
+
+// ─── IA Adaptada a Reglas de Grupos ──────────────────────────
+function cpuThink() {
+    if (!cueBall.active) return;
+    
+    const myGrp = cpuGroup;
+    let candidates;
+    
+    if (tableOpen) {
+        // Mesa abierta: todas excepto negra
+        candidates = balls.filter(b => b.active && !b.isCue && !b.isBlack);
+    } else {
+        const myBalls = balls.filter(b => b.active && !b.isCue && !b.isBlack && b.getGroup() === myGrp);
+        if (myBalls.length > 0) {
+            candidates = myBalls;
+        } else {
+            // Ya limpió grupo → ir a la negra
+            const black = balls.find(b => b.isBlack && b.active);
+            candidates = black ? [black] : [];
+        }
+    }
+    
+    let bestShot = null, bestScore = -Infinity;
+    
+    for (const target of candidates) {
+        for (const pocket of POCKETS) {
+            const tpx=pocket.x-target.x, tpy=pocket.y-target.y;
+            const tpDist=Math.sqrt(tpx*tpx+tpy*tpy);
+            const tpNx=tpx/tpDist, tpNy=tpy/tpDist;
+            const ghostX=target.x-tpNx*BALL_R*2, ghostY=target.y-tpNy*BALL_R*2;
+            const cgx=ghostX-cueBall.x, cgy=ghostY-cueBall.y;
+            const cgDist=Math.sqrt(cgx*cgx+cgy*cgy);
+            if (cgDist < BALL_R*2) continue;
+            
+            // Verificar camino libre
+            let blocked = false;
+            for (const ob of balls) {
+                if (!ob.active || ob===cueBall || ob===target) continue;
+                const t=((ob.x-cueBall.x)*cgx+(ob.y-cueBall.y)*cgy)/(cgDist*cgDist);
+                if (t>0 && t<1) {
+                    const px=cueBall.x+t*cgx, py=cueBall.y+t*cgy;
+                    if (Math.sqrt((ob.x-px)**2+(ob.y-py)**2) < BALL_R*2.5) { blocked=true; break; }
+                }
+            }
+            if (blocked) continue;
+            
+            const angle=Math.abs(Math.atan2(tpNy,tpNx)-Math.atan2(cgy/cgDist,cgx/cgDist));
+            const score=1000/(cgDist+tpDist)-angle*2;
+            if (score>bestScore) {
+                bestScore=score;
+                bestShot={angle:Math.atan2(cgy,cgx), power:Math.min(MAX_POWER,6+cgDist*0.025)};
+            }
+        }
+    }
+    
+    if (!bestShot) {
+        const ref=candidates[0]||{x:W/2,y:H/2};
+        bestShot={angle:Math.atan2(ref.y-cueBall.y,ref.x-cueBall.x), power:10+Math.random()*8};
+    }
+    
+    bestShot.angle += (Math.random()-0.5)*CPU_ERROR*2;
+    
+    setTimeout(() => {
+        if (currentTurn!=='cpu') return;
+        resetShotTracking();
+        cueBall.vx=Math.cos(bestShot.angle)*bestShot.power;
+        cueBall.vy=Math.sin(bestShot.angle)*bestShot.power;
+        aiming=false;
+    }, CPU_DELAY);
+}
+
+// ─── UI Updates ──────────────────────────────────────────────
+function updateTurnUI() {
+    document.getElementById('box-player').classList.toggle('active', currentTurn==='player');
+    document.getElementById('box-cpu').classList.toggle('active', currentTurn==='cpu');
+    canvas.style.cursor = currentTurn==='player' ? 'crosshair' : 'default';
+}
+
+function updateGroupUI() {
+    const pBadge = document.getElementById('p-group');
+    const cBadge = document.getElementById('c-group');
+    
+    if (playerGroup === 'solids') {
+        pBadge.textContent='LISAS (1-7)'; pBadge.className='group-badge grp-solids';
+        cBadge.textContent='RAYADAS (9-15)'; cBadge.className='group-badge grp-stripes';
+    } else if (playerGroup === 'stripes') {
+        pBadge.textContent='RAYADAS (9-15)'; pBadge.className='group-badge grp-stripes';
+        cBadge.textContent='LISAS (1-7)'; cBadge.className='group-badge grp-solids';
+    } else {
+        pBadge.textContent='SIN ASIGNAR'; pBadge.className='group-badge grp-none';
+        cBadge.textContent='SIN ASIGNAR'; cBadge.className='group-badge grp-none';
+    }
+}
+
+function setStatus(msg) {
+    document.getElementById('status-msg').textContent = msg;
+}
+
+// ─── Setup ───────────────────────────────────────────────────
+function initBalls() {
+    balls=[]; playerGroup=null; cpuGroup=null; tableOpen=true;
+    currentTurn='player'; resetShotTracking();
+    cueBall=new Ball(W*0.25,H/2,0); balls.push(cueBall);
+    const startX=W*0.73, startY=H/2, spacing=BALL_R*2.05;
+    const rack=[1,9,2,10,8,3,11,4,14,7,13,6,15,12,5];
+    let idx=0;
+    for(let r=0;r<5;r++) for(let c=0;c<=r;c++) {
+        balls.push(new Ball(startX+r*spacing*Math.cos(Math.PI/6), startY+(c-r/2)*spacing, rack[idx++]));
+    }
+    updateGroupUI(); updateTurnUI();
+    setStatus('Mesa abierta. Emboca la primera bola para asignar grupos.');
+}
+
+// ─── Taco Visual ─────────────────────────────────────────────
+function drawCue() {
+    if (!aiming||!cueBall.active||currentTurn!=='player') return;
+    const angle=Math.atan2(mouseY-cueBall.y, mouseX-cueBall.x);
+    ctx.strokeStyle='rgba(255,255,255,0.25)'; ctx.lineWidth=1; ctx.setLineDash([5,5]);
+    ctx.beginPath(); ctx.moveTo(cueBall.x,cueBall.y);
+    ctx.lineTo(cueBall.x+Math.cos(angle)*300,cueBall.y+Math.sin(angle)*300);
+    ctx.stroke(); ctx.setLineDash([]);
+    const off=30+power*3;
+    const sx=cueBall.x-Math.cos(angle)*off, sy=cueBall.y-Math.sin(angle)*off;
+    ctx.strokeStyle='#d4a056'; ctx.lineWidth=6; ctx.lineCap='round';
+    ctx.beginPath(); ctx.moveTo(sx,sy);
+    ctx.lineTo(sx-Math.cos(angle)*250,sy-Math.sin(angle)*250); ctx.stroke();
+    ctx.strokeStyle='#fff'; ctx.lineWidth=5;
+    ctx.beginPath(); ctx.moveTo(sx,sy);
+    ctx.lineTo(sx-Math.cos(angle)*8,sy-Math.sin(angle)*8); ctx.stroke();
+}
+
+// ─── Loop ────────────────────────────────────────────────────
+function update() {
+    if (charging && currentTurn==='player') {
+        power+=powerDir*0.5;
+        if(power>=MAX_POWER){power=MAX_POWER;powerDir=-1;}
+        if(power<=0){power=0;powerDir=1;}
+        document.getElementById('power-bar').style.width=(power/MAX_POWER*100)+'%';
+    }
+    balls.forEach(b=>b.update());
+    resolveCollisions();
+    const moving=balls.some(b=>b.active&&(Math.abs(b.vx)>MIN_SPEED||Math.abs(b.vy)>MIN_SPEED));
+    const wasMoving=!aiming;
+    aiming=!moving;
+    if(wasMoving&&aiming) evaluateShot();
+}
+
+function draw() {
+    ctx.clearRect(0,0,W,H);
+    ctx.fillStyle='#085500'; ctx.fillRect(CUSHION,CUSHION,W-CUSHION*2,H-CUSHION*2);
+    ctx.fillStyle='#000';
+    for(const p of POCKETS){ctx.beginPath();ctx.arc(p.x,p.y,POCKET_R,0,Math.PI*2);ctx.fill();}
+    balls.forEach(b=>b.draw());
+    drawCue();
+}
+
+function loop(){update();draw();animId=requestAnimationFrame(loop);}
+
+// ─── Fin Partida ─────────────────────────────────────────────
+function endGame(winner, reason) {
+    cancelAnimationFrame(animId);
+    const won = winner==='player';
+    document.getElementById('ov-title').textContent = won?'¡GANASTE!':'PERDISTE';
+    document.getElementById('ov-title').style.color = won?'#0f0':'#f00';
+    document.getElementById('ov-sub').textContent = reason;
+    document.getElementById('msg-overlay').style.display='block';
+}
+
+function resetGame() {
+    document.getElementById('msg-overlay').style.display='none';
+    power=0; aiming=true;
+    document.getElementById('power-bar').style.width='0%';
+    initBalls(); loop();
+}
+
+// ─── Input ───────────────────────────────────────────────────
+canvas.addEventListener('mousemove',e=>{
+    if(currentTurn!=='player')return;
+    const r=canvas.getBoundingClientRect();
+    mouseX=(e.clientX-r.left)*(W/r.width);
+    mouseY=(e.clientY-r.top)*(H/r.height);
+});
+canvas.addEventListener('mousedown',()=>{
+    if(aiming&&cueBall.active&&currentTurn==='player')charging=true;
+});
+canvas.addEventListener('mouseup',()=>{
+    if(charging&&aiming&&cueBall.active&&currentTurn==='player'){
+        resetShotTracking();
+        const angle=Math.atan2(mouseY-cueBall.y,mouseX-cueBall.x);
+        cueBall.vx=Math.cos(angle)*power;
+        cueBall.vy=Math.sin(angle)*power;
+        charging=false;power=0;powerDir=1;
+        document.getElementById('power-bar').style.width='0%';
+    }
+});
+canvas.addEventListener('touchmove',e=>{
+    e.preventDefault();if(currentTurn!=='player')return;
+    const r=canvas.getBoundingClientRect();
+    mouseX=(e.touches[0].clientX-r.left)*(W/r.width);
+    mouseY=(e.touches[0].clientY-r.top)*(H/r.height);
+},{passive:false});
+canvas.addEventListener('touchstart',e=>{
+    e.preventDefault();
+    if(aiming&&cueBall.active&&currentTurn==='player')charging=true;
+},{passive:false});
+canvas.addEventListener('touchend',e=>{
+    e.preventDefault();
+    if(charging&&aiming&&cueBall.active&&currentTurn==='player'){
+        resetShotTracking();
+        const angle=Math.atan2(mouseY-cueBall.y,mouseX-cueBall.x);
+        cueBall.vx=Math.cos(angle)*power;
+        cueBall.vy=Math.sin(angle)*power;
+        charging=false;power=0;powerDir=1;
+        document.getElementById('power-bar').style.width='0%';
+    }
+});
+
+function resize(){
+    const maxW=Math.min(window.innerWidth-20,900);
+    canvas.style.width=maxW+'px';
+    canvas.style.height=(maxW*0.5)+'px';
+}
+window.addEventListener('resize',resize);resize();
+
+initBalls();loop();
+</script>
+</body>
+</html>

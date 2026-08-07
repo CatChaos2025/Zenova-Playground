@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🚴 BMX Extreme: Stable Edition</title>
+<style>
+    :root { --bg: #0f172a; --panel: rgba(30, 41, 59, 0.9); --accent: #facc15; --danger: #ef4444; --text: #f8fafc; }
+    * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
+    body { font-family: system-ui, sans-serif; background: var(--bg); color: var(--text); overflow: hidden; height: 100vh; }
+    canvas { display: block; width: 100%; height: 100%; }
+
+    /* UI Overlay */
+    .ui { position: fixed; top: 20px; left: 20px; pointer-events: none; z-index: 10; }
+    .hud { background: var(--panel); backdrop-filter: blur(8px); padding: 15px 25px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.1); min-width: 180px; }
+    .row { display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 0.9rem; }
+    .val { font-weight: 800; color: var(--accent); font-size: 1.2rem; }
+    
+    .combo { 
+        position: fixed; top: 20px; right: 20px; 
+        background: linear-gradient(135deg, #ef4444, #f97316); 
+        padding: 10px 20px; border-radius: 10px; font-weight: 900; font-size: 1.5rem;
+        transform: scale(0); transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        box-shadow: 0 5px 15px rgba(239,68,68,0.4);
+    }
+    .combo.active { transform: scale(1); }
+
+    .msg { 
+        position: fixed; inset: 0; background: rgba(0,0,0,0.85); backdrop-filter: blur(5px);
+        display: flex; align-items: center; justify-content: center; z-index: 100;
+    }
+    .msg.hidden { display: none; }
+    .card { background: #1e293b; padding: 40px; border-radius: 20px; text-align: center; border: 1px solid rgba(255,255,255,0.1); max-width: 400px; }
+    h1 { font-size: 2.5rem; margin-bottom: 10px; color: var(--accent); }
+    p { opacity: 0.8; margin-bottom: 20px; line-height: 1.5; }
+    button { background: var(--accent); border: none; padding: 12px 30px; font-size: 1.1rem; font-weight: bold; border-radius: 8px; cursor: pointer; }
+    button:hover { filter: brightness(1.1); transform: translateY(-2px); }
+
+    .controls { position: fixed; bottom: 20px; left: 20px; font-size: 0.75rem; opacity: 0.6; line-height: 1.8; }
+    .key { background: rgba(255,255,255,0.15); padding: 2px 6px; border-radius: 4px; font-family: monospace; font-weight: bold; }
+</style>
+</head>
+<body>
+
+<canvas id="c"></canvas>
+
+<div class="ui">
+    <div class="hud">
+        <div class="row"><span>Distancia</span><span class="val" id="dDist">0m</span></div>
+        <div class="row"><span>Puntos</span><span class="val" id="dScore">0</span></div>
+        <div class="row"><span>Monedas</span><span class="val" id="dCoins">0</span></div>
+    </div>
+</div>
+
+<div class="combo" id="dCombo">COMBO x2</div>
+
+<div class="controls">
+    <span class="key">→</span> Acelerar <span class="key">↑</span> Saltar<br>
+    <span class="key">ESPACIO</span> Backflip · <span class="key">Z</span> Frontflip
+</div>
+
+<!-- Pantallas -->
+<div id="scrStart" class="msg">
+    <div class="card">
+        <h1>BMX EXTREME</h1>
+        <p>Versión Estable.<br>Salta rampas, haz trucos y evita caer de cabeza.</p>
+        <button onclick="startGame()">JUGAR</button>
+    </div>
+</div>
+
+<div id="scrOver" class="msg hidden">
+    <div class="card">
+        <h1 style="color:var(--danger)">💥 CRASH</h1>
+        <p id="finalMsg">Has caído mal.</p>
+        <button onclick="resetGame()">REINTENTAR</button>
+    </div>
+</div>
+
+<script>
+/**
+ * MOTOR ESTABLE
+ * - Terreno matemático continuo (no hay arrays de puntos que se desincronicen)
+ * - Física simplificada y predecible
+ * - Sin dependencias externas
+ */
+
+const C = document.getElementById('c');
+const X = C.getContext('2d');
+let W, H;
+
+// Configuración Física (Ajustada para ser permisiva)
+const G = 0.5;          // Gravedad
+const FRIC = 0.98;      // Fricción suelo
+const AIR = 0.995;      // Resistencia aire
+const JUMP = -11;       // Fuerza salto
+const ACC = 0.3;        // Aceleración
+const MAX_V = 20;       // Velocidad máxima
+
+// Estado Global
+const S = {
+    on: false,
+    dist: 0,
+    score: 0,
+    coins: 0,
+    combo: 1,
+    comboT: 0,
+    camX: 0,
+    shake: 0
+};
+
+// Jugador
+const P = {
+    x: 0, y: 0, vx: 0, vy: 0,
+    ang: 0, vang: 0,
+    ground: false,
+    trick: null, // 'back', 'front'
+    pedal: 0
+};
+
+// Entidades (Monedas/Obstáculos) generadas proceduralmente
+let entities = []; 
+
+// Input
+const K = {};
+window.onkeydown = e => K[e.code] = true;
+window.onkeyup = e => K[e.code] = false;
+
+// Resize
+function resize() { W = C.width = innerWidth; H = C.height = innerHeight; }
+window.onresize = resize;
+resize();
+
+// --- GENERADOR DE TERRENO MATEMÁTICO ---
+// Esta función SIEMPRE devuelve la misma Y para una misma X.
+// Elimina bugs de huecos en el terreno.
+function getTerrainY(x) {
+    if (x < 0) return H * 0.7; // Zona inicial plana
+    
+    // Suma de ondas sinusoidales para crear colinas naturales
+    const n1 = Math.sin(x * 0.002) * 150;
+    const n2 = Math.sin(x * 0.005) * 80;
+    const n3 = Math.sin(x * 0.01) * 30;
+    
+    // Base altura + ruido
+    return (H * 0.7) + n1 + n2 + n3;
+}
+
+function getTerrainAngle(x) {
+    // Derivada numérica simple para obtener la pendiente
+    const delta = 5;
+    const y1 = getTerrainY(x - delta);
+    const y2 = getTerrainY(x + delta);
+    return Math.atan2(y2 - y1, delta * 2);
+}
+
+// --- AUDIO SIMPLE (Sin errores) ---
+const Audio = {
+    ctx: null,
+    init() {
+        try { this.ctx = new (window.AudioContext || window.webkitAudioContext)(); } catch(e){}
+    },
+    beep(freq, type, dur) {
+        if (!this.ctx) return;
+        const o = this.ctx.createOscillator();
+        const g = this.ctx.createGain();
+        o.type = type;
+        o.frequency.value = freq;
+        o.connect(g);
+        g.connect(this.ctx.destination);
+        g.gain.setValueAtTime(0.1, this.ctx.currentTime);
+        g.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + dur);
+        o.start(); o.stop(this.ctx.currentTime + dur);
+    },
+    jump() { this.beep(400, 'sine', 0.1); },
+    coin() { this.beep(1200, 'square', 0.1); setTimeout(()=>this.beep(1800,'square',0.1), 50); },
+    crash() { this.beep(100, 'sawtooth', 0.5); },
+    trick() { this.beep(600, 'triangle', 0.15); }
+};
+
+// --- LÓGICA PRINCIPAL ---
+
+function startGame() {
+    Audio.init();
+    document.getElementById('scrStart').classList.add('hidden');
+    resetGame();
+}
+
+function resetGame() {
+    P.x = 0; P.y = H * 0.7 - 50; P.vx = 0; P.vy = 0;
+    P.ang = 0; P.vang = 0; P.ground = false; P.trick = null;
+    S.dist = 0; S.score = 0; S.coins = 0; S.combo = 1; S.comboT = 0;
+    S.camX = 0; S.shake = 0; S.on = true;
+    
+    // Generar entidades iniciales
+    entities = [];
+    for(let i=500; i<5000; i+=300) spawnEntity(i);
+    
+    document.getElementById('scrOver').classList.add('hidden');
+    updateUI();
+    loop();
+}
+
+function spawnEntity(baseX) {
+    // Generar monedas o rocas basado en posición determinista
+    const ty = getTerrainY(baseX);
+    if (Math.random() > 0.3) {
+        // Moneda flotante
+        entities.push({ type:'coin', x: baseX, y: ty - 60 - Math.random()*60, active:true });
+    } else {
+        // Roca en suelo
+        entities.push({ type:'rock', x: baseX, y: ty - 15, r: 15, active:true });
+    }
+}
+
+function gameOver(reason) {
+    S.on = false;
+    Audio.crash();
+    document.getElementById('finalMsg').innerText = reason;
+    document.getElementById('scrOver').classList.remove('hidden');
+}
+
+function update() {
+    if (!S.on) return;
+
+    // 1. Input
+    if (K['ArrowRight'] || K['KeyD']) P.vx += ACC;
+    if (K['ArrowLeft'] || K['KeyA']) P.vx *= 0.9; // Freno fuerte
+    
+    // Salto
+    if ((K['ArrowUp'] || K['KeyW']) && P.ground) {
+        P.vy = JUMP;
+        P.ground = false;
+        Audio.jump();
+    }
+
+    // Trucos (Simplificado: solo detectar tecla en aire)
+    if (!P.ground) {
+        if (K['Space']) { P.vang -= 0.08; P.trick = 'back'; }
+        else if (K['KeyZ']) { P.vang += 0.08; P.trick = 'front'; }
+        else { P.vang *= 0.95; P.trick = null; } // Estabilizar si no toca nada
+    } else {
+        // En suelo: alinear ángulo con terreno suavemente
+        const targetAng = getTerrainAngle(P.x);
+        P.ang += (targetAng - P.ang) * 0.2;
+        P.vang = 0;
+        
+        // Si acabamos de aterrizar y estábamos haciendo truco
+        if (P.trick) {
+            addScore(500 * S.combo);
+            S.combo++;
+            S.comboT = 180; // 3 segundos a 60fps
+            Audio.trick();
+            showCombo();
+            P.trick = null;
+        }
+    }
+
+    // 2. Física
+    P.vy += G;
+    P.vx *= P.ground ? FRIC : AIR;
+    P.vx = Math.max(-5, Math.min(MAX_V, P.vx)); // Clamp velocidad
+    
+    P.x += P.vx;
+    P.y += P.vy;
+    P.ang += P.vang;
+    P.pedal += P.vx * 0.1;
+
+    // 3. Colisión Suelo (Robusta)
+    const groundY = getTerrainY(P.x);
+    if (P.y >= groundY) {
+        // Verificar crash por ángulo excesivo
+        const terrAng = getTerrainAngle(P.x);
+        let diff = Math.abs(P.ang - terrAng);
+        while(diff > Math.PI) diff -= Math.PI*2;
+        
+        if (Math.abs(diff) > 1.8 && P.vy > 8) { // 1.8 rad ~= 100 grados
+            S.shake = 20;
+            gameOver("Aterrizaje fatal: Caíste de cabeza.");
+            return;
+        }
+
+        P.y = groundY;
+        P.vy = 0;
+        P.ground = true;
+        
+        // Efecto aterrizaje
+        if (P.vy > 2) S.shake = Math.min(10, P.vy);
+    } else {
+        P.ground = false;
+    }
+
+    // 4. Entidades
+    // Generar más adelante
+    const lastE = entities[entities.length-1];
+    if (lastE && lastE.x < P.x + W + 500) spawnEntity(lastE.x + 200 + Math.random()*200);
+    
+    // Limpiar viejas
+    entities = entities.filter(e => e.x > P.x - W);
+
+    // Colisiones
+    for (let e of entities) {
+        if (!e.active) continue;
+        const dx = P.x - e.x;
+        const dy = P.y - e.y;
+        const d = Math.sqrt(dx*dx + dy*dy);
+        
+        if (e.type === 'coin' && d < 40) {
+            e.active = false;
+            S.coins++;
+            addScore(100);
+            Audio.coin();
+        }
+        if (e.type === 'rock' && d < e.r + 10) {
+            S.shake = 30;
+            gameOver("Te estrellaste contra una roca.");
+            return;
+        }
+    }
+
+    // 5. Estado
+    S.dist = Math.max(S.dist, Math.floor(P.x / 10));
+    S.camX += (P.x - W/3 - S.camX) * 0.1;
+    if (S.shake > 0) S.shake *= 0.9;
+    if (S.comboT > 0) { S.comboT--; if(S.comboT<=0) { S.combo=1; showCombo(); } }
+    
+    updateUI();
+}
+
+function addScore(n) { S.score += n; }
+
+function showCombo() {
+    const el = document.getElementById('dCombo');
+    el.innerText = `COMBO x${S.combo}`;
+    el.classList.toggle('active', S.combo > 1);
+}
+
+function updateUI() {
+    document.getElementById('dDist').innerText = S.dist + 'm';
+    document.getElementById('dScore').innerText = S.score;
+    document.getElementById('dCoins').innerText = S.coins;
+}
+
+// --- RENDERIZADO ---
+function draw() {
+    // Fondo
+    const grad = X.createLinearGradient(0,0,0,H);
+    grad.addColorStop(0, '#1e3c72'); grad.addColorStop(1, '#2a5298');
+    X.fillStyle = grad; X.fillRect(0,0,W,H);
+
+    // Shake camera
+    const sx = (Math.random()-0.5)*S.shake;
+    const sy = (Math.random()-0.5)*S.shake;
+    
+    X.save();
+    X.translate(-S.camX + sx, sy);
+
+    // Terreno (Dibujado como polígono continuo)
+    X.fillStyle = '#2d3436';
+    X.strokeStyle = '#00b894';
+    X.lineWidth = 4;
+    X.beginPath();
+    
+    // Dibujar solo lo visible
+    const startX = Math.floor(S.camX / 20) * 20;
+    const endX = startX + W + 40;
+    
+    X.moveTo(startX, getTerrainY(startX));
+    for(let x = startX; x <= endX; x += 20) {
+        X.lineTo(x, getTerrainY(x));
+    }
+    X.lineTo(endX, H + 500);
+    X.lineTo(startX, H + 500);
+    X.fill();
+    X.stroke();
+
+    // Entidades
+    for(let e of entities) {
+        if (!e.active || e.x < S.camX - 50 || e.x > S.camX + W + 50) continue;
+        
+        if (e.type === 'coin') {
+            X.fillStyle = '#facc15';
+            X.beginPath(); X.arc(e.x, e.y + Math.sin(Date.now()/200)*5, 10, 0, Math.PI*2); X.fill();
+            X.strokeStyle = '#fff'; X.lineWidth=2; X.stroke();
+        } else {
+            X.fillStyle = '#475569';
+            X.beginPath(); X.arc(e.x, e.y, e.r, 0, Math.PI*2); X.fill();
+        }
+    }
+
+    // Jugador
+    X.save();
+    X.translate(P.x, P.y);
+    X.rotate(P.ang);
+    
+    // Bici Simple y Clara
+    X.strokeStyle = '#ef4444'; X.lineWidth = 3;
+    X.beginPath(); X.moveTo(-15, 5); X.lineTo(0, -10); X.lineTo(15, 5); X.stroke(); // Cuadro
+    
+    // Ruedas
+    X.strokeStyle = '#fff'; X.lineWidth = 2;
+    X.beginPath(); X.arc(-15, 10, 10, 0, Math.PI*2); X.stroke();
+    X.beginPath(); X.arc(15, 10, 10, 0, Math.PI*2); X.stroke();
+    
+    // Piloto
+    X.fillStyle = '#facc15';
+    X.beginPath(); X.arc(-5, -20, 6, 0, Math.PI*2); X.fill(); // Cabeza
+    X.strokeStyle = '#facc15'; X.lineWidth = 3;
+    X.beginPath(); X.moveTo(-5, -14); X.lineTo(-5, -5); X.stroke(); // Cuerpo
+    
+    X.restore();
+    X.restore();
+}
+
+function loop() {
+    if (S.on) {
+        update();
+        draw();
+        requestAnimationFrame(loop);
+    }
+}
+
+// Dibujar fondo inicial
+draw();
+
+</script>
+</body>
+</html>

@@ -1,0 +1,734 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Doodle Jump - Salto Infinito</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            overflow: hidden;
+            background: #faf8ef;
+            font-family: 'Comic Sans MS', 'Segoe UI', cursive, sans-serif;
+            touch-action: none;
+            user-select: none;
+        }
+        canvas { display: block; }
+
+        /* Fondo cuadriculado estilo papel */
+        #bg-pattern {
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background-image:
+                linear-gradient(rgba(200,200,200,0.3) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(200,200,200,0.3) 1px, transparent 1px);
+            background-size: 25px 25px;
+            pointer-events: none; z-index: 0;
+        }
+
+        #ui {
+            position: absolute; top: 15px; left: 20px;
+            z-index: 10; pointer-events: none;
+        }
+        #score-display {
+            font-size: 32px; font-weight: bold; color: #333;
+        }
+        #best-display {
+            font-size: 14px; color: #999; margin-top: 2px;
+        }
+
+        #overlay {
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(250,248,239,0.92);
+            display: flex; justify-content: center; align-items: center;
+            z-index: 100; backdrop-filter: blur(3px);
+        }
+        #overlay.hidden { display: none; }
+
+        .menu-box {
+            text-align: center; max-width: 360px; width: 90%;
+        }
+        .menu-box h1 {
+            font-size: 42px; color: #7cb342; margin-bottom: 5px;
+            text-shadow: 2px 2px 0 #558b2f;
+        }
+        .menu-box .subtitle { color: #888; font-size: 15px; margin-bottom: 30px; }
+        .menu-box .final-score {
+            font-size: 60px; font-weight: 900; color: #ff6f00;
+            margin: 10px 0; line-height: 1;
+        }
+        .menu-box .label {
+            color: #aaa; font-size: 12px; text-transform: uppercase;
+            letter-spacing: 2px; margin-top: 5px;
+        }
+        .menu-box button {
+            margin-top: 25px; padding: 16px 50px;
+            background: #7cb342; color: white; border: none;
+            border-radius: 50px; font-size: 22px; font-weight: bold;
+            cursor: pointer; transition: transform 0.15s;
+            box-shadow: 0 4px 0 #558b2f;
+            font-family: inherit;
+        }
+        .menu-box button:hover { transform: translateY(-2px); box-shadow: 0 6px 0 #558b2f; }
+        .menu-box button:active { transform: translateY(2px); box-shadow: 0 0 0 #558b2f; }
+
+        .hint {
+            position: absolute; bottom: 25px; left: 0; right: 0;
+            text-align: center; color: #bbb; font-size: 13px;
+            pointer-events: none; z-index: 10;
+        }
+    </style>
+</head>
+<body>
+
+<div id="bg-pattern"></div>
+<canvas id="canvas"></canvas>
+
+<div id="ui">
+    <div id="score-display">0</div>
+    <div id="best-display">MEJOR: 0</div>
+</div>
+
+<div class="hint" id="hint">← → Flechas / Toca los lados para moverte</div>
+
+<div id="overlay">
+    <div class="menu-box" id="menu-content">
+        <h1>🐸 DOODLE JUMP</h1>
+        <p class="subtitle">¡Salta tan alto como puedas!</p>
+        <button onclick="startGame()">JUGAR</button>
+    </div>
+</div>
+
+<script>
+// ===== CONFIGURACIÓN =====
+const GRAVITY = 0.35;
+const JUMP_FORCE = -9.5;
+const SUPER_JUMP = -16;
+const MOVE_SPEED = 5;
+const PLAT_WIDTH = 70;
+const PLAT_HEIGHT = 18;
+const PLAYER_SIZE = 30;
+
+const COLORS = {
+    normal: '#7cb342',
+    moving: '#42a5f5',
+    breakable: '#8d6e63',
+    spring: '#ff6f00',
+    jetpack: '#ffab00',
+    monster: '#e53935',
+    bg: '#faf8ef'
+};
+
+// ===== ESTADO =====
+let canvas, ctx, W, H;
+let game = {
+    running: false,
+    score: 0,
+    best: parseInt(localStorage.getItem('doodleBest')) || 0,
+    platforms: [],
+    particles: [],
+    cameraY: 0,
+    maxHeight: 0,
+    difficulty: 0
+};
+
+let player = {
+    x: 0, y: 0,
+    vx: 0, vy: 0,
+    width: PLAYER_SIZE,
+    height: PLAYER_SIZE,
+    facingRight: true,
+    jetpackTimer: 0,
+    dead: false
+};
+
+let keys = { left: false, right: false };
+
+// ===== CLASES DE PLATAFORMAS =====
+
+function createPlatform(x, y, type) {
+    const p = {
+        x, y,
+        width: PLAT_WIDTH,
+        height: PLAT_HEIGHT,
+        type: type || 'normal', // normal, moving, breakable, spring, jetpack
+        dir: Math.random() < 0.5 ? 1 : -1,
+        speed: 1 + Math.random() * 1.5,
+        broken: false,
+        hasSpring: false,
+        hasJetpack: false,
+        hasMonster: false,
+        monsterAlive: true,
+        monsterPhase: Math.random() * Math.PI * 2
+    };
+
+    if (type === 'spring') p.hasSpring = true;
+    if (type === 'jetpack') p.hasJetpack = true;
+
+    return p;
+}
+
+function generateInitialPlatforms() {
+    game.platforms = [];
+    // Plataforma base segura
+    game.platforms.push(createPlatform(W / 2 - PLAT_WIDTH / 2, H - 80, 'normal'));
+
+    let y = H - 80;
+    while (y > -H) {
+        y -= 55 + Math.random() * 35;
+        const x = Math.random() * (W - PLAT_WIDTH);
+        game.platforms.push(createPlatform(x, y, 'normal'));
+    }
+}
+
+function generatePlatformsAbove() {
+    const highest = Math.min(...game.platforms.map(p => p.y));
+    const gap = 55 + Math.random() * (35 + game.difficulty * 15);
+    const y = highest - gap;
+    const x = Math.random() * (W - PLAT_WIDTH);
+
+    // Determinar tipo según dificultad
+    let type = 'normal';
+    const r = Math.random();
+    const d = Math.min(game.difficulty, 0.8);
+
+    if (r < 0.05) type = 'spring';
+    else if (r < 0.08) type = 'jetpack';
+    else if (r < 0.08 + d * 0.3) type = 'moving';
+    else if (r < 0.08 + d * 0.5) type = 'breakable';
+
+    const plat = createPlatform(x, y, type);
+
+    // Monstruos en plataformas normales/moving
+    if ((type === 'normal' || type === 'moving') && Math.random() < d * 0.15) {
+        plat.hasMonster = true;
+    }
+
+    game.platforms.push(plat);
+
+    // Limpiar plataformas muy abajo
+    game.platforms = game.platforms.filter(p => p.y < game.cameraY + H + 100);
+}
+
+// ===== LÓGICA DEL JUEGO =====
+
+function startGame() {
+    document.getElementById('overlay').classList.add('hidden');
+    document.getElementById('hint').style.display = 'block';
+
+    game.running = true;
+    game.score = 0;
+    game.maxHeight = 0;
+    game.difficulty = 0;
+    game.particles = [];
+    game.cameraY = 0;
+
+    player.x = W / 2 - PLAYER_SIZE / 2;
+    player.y = H - 120;
+    player.vx = 0;
+    player.vy = JUMP_FORCE;
+    player.dead = false;
+    player.jetpackTimer = 0;
+    player.facingRight = true;
+
+    generateInitialPlatforms();
+    updateScore();
+    requestAnimationFrame(loop);
+}
+
+function die() {
+    if (player.dead) return;
+    player.dead = true;
+    game.running = false;
+
+    // Partículas
+    for (let i = 0; i < 15; i++) {
+        game.particles.push({
+            x: player.x + player.width / 2,
+            y: player.y - game.cameraY + player.height / 2,
+            vx: (Math.random() - 0.5) * 8,
+            vy: (Math.random() - 0.5) * 8,
+            life: 1,
+            color: '#7cb342',
+            size: 3 + Math.random() * 5
+        });
+    }
+
+    if (game.score > game.best) {
+        game.best = game.score;
+        localStorage.setItem('doodleBest', game.best);
+    }
+
+    setTimeout(showGameOver, 600);
+}
+
+function showGameOver() {
+    const mc = document.getElementById('menu-content');
+    mc.innerHTML = `
+        <div class="label">PUNTUACIÓN</div>
+        <div class="final-score">${game.score}</div>
+        <div class="label">MEJOR: ${game.best}</div>
+        <button onclick="startGame()">REINTENTAR</button>
+    `;
+    document.getElementById('overlay').classList.remove('hidden');
+}
+
+function updateScore() {
+    document.getElementById('score-display').innerText = game.score;
+    document.getElementById('best-display').innerText = `MEJOR: ${game.best}`;
+}
+
+// ===== UPDATE =====
+
+let lastTime = 0;
+function loop(timestamp) {
+    const dt = Math.min((timestamp - lastTime) / 16.67, 3); // Normalizado a ~60fps
+    lastTime = timestamp;
+
+    if (game.running) update(dt);
+    draw();
+    requestAnimationFrame(loop);
+}
+
+function update(dt) {
+    // Movimiento horizontal
+    if (keys.left) { player.vx = -MOVE_SPEED; player.facingRight = false; }
+    else if (keys.right) { player.vx = MOVE_SPEED; player.facingRight = true; }
+    else player.vx *= 0.8;
+
+    player.x += player.vx * dt;
+
+    // Wrap around pantalla
+    if (player.x + player.width < 0) player.x = W;
+    if (player.x > W) player.x = -player.width;
+
+    // Jetpack
+    if (player.jetpackTimer > 0) {
+        player.jetpackTimer -= dt;
+        player.vy = -12;
+        // Partículas jetpack
+        if (Math.random() < 0.5) {
+            game.particles.push({
+                x: player.x + player.width / 2 + (Math.random()-0.5)*10,
+                y: player.y - game.cameraY + player.height,
+                vx: (Math.random()-0.5)*2,
+                vy: 2 + Math.random()*3,
+                life: 0.6,
+                color: Math.random()<0.5 ? '#ff6f00' : '#ffeb3b',
+                size: 3 + Math.random()*4
+            });
+        }
+    } else {
+        // Gravedad normal
+        player.vy += GRAVITY * dt;
+    }
+
+    player.y += player.vy * dt;
+
+    // Colisión con plataformas (solo cayendo y sin jetpack)
+    if (player.vy > 0 && player.jetpackTimer <= 0) {
+        for (const plat of game.platforms) {
+            if (plat.broken) continue;
+
+            const px = player.x + player.width * 0.2;
+            const pw = player.width * 0.6;
+            const py = player.y + player.height;
+            const prevPy = py - player.vy * dt;
+
+            if (px + pw > plat.x && px < plat.x + plat.width &&
+                py >= plat.y && prevPy <= plat.y + plat.height) {
+
+                if (plat.type === 'breakable') {
+                    plat.broken = true;
+                    spawnBreakParticles(plat);
+                    continue;
+                }
+
+                // Monstruo
+                if (plat.hasMonster && plat.monsterAlive) {
+                    // Si cae sobre el monstruo, lo mata
+                    if (player.vy > 0) {
+                        plat.monsterAlive = false;
+                        player.vy = JUMP_FORCE;
+                        spawnMonsterParticles(plat);
+                        game.score += 50;
+                        updateScore();
+                    }
+                    continue;
+                }
+
+                // Rebote
+                if (plat.hasSpring) {
+                    player.vy = SUPER_JUMP;
+                    spawnJumpParticles(player.x + player.width/2, plat.y - game.cameraY);
+                } else {
+                    player.vy = JUMP_FORCE;
+                }
+
+                player.y = plat.y - player.height;
+            }
+        }
+    }
+
+    // Colisión con monstruos (lateral/abajo = muerte)
+    for (const plat of game.platforms) {
+        if (!plat.hasMonster || !plat.monsterAlive) continue;
+        const mx = plat.x + plat.width / 2;
+        const my = plat.y - 20;
+        const px = player.x + player.width / 2;
+        const py = player.y + player.height / 2;
+        if (Math.hypot(mx - px, my - py) < 28 && player.jetpackTimer <= 0) {
+            // Solo muere si no está cayendo sobre él
+            if (player.vy <= 0 || py > my) {
+                die();
+                return;
+            }
+        }
+    }
+
+    // Actualizar plataformas móviles
+    game.platforms.forEach(p => {
+        if (p.type === 'moving') {
+            p.x += p.speed * p.dir * dt;
+            if (p.x <= 0 || p.x + p.width >= W) p.dir *= -1;
+        }
+    });
+
+    // Cámara sube cuando el jugador supera la mitad
+    const screenPlayerY = player.y - game.cameraY;
+    if (screenPlayerY < H * 0.4) {
+        const diff = H * 0.4 - screenPlayerY;
+        game.cameraY -= diff;
+        player.y -= diff;
+
+        // Score basado en altura
+        const newScore = Math.floor(-game.cameraY / 10);
+        if (newScore > game.score) {
+            game.score = newScore;
+            game.difficulty = Math.min(newScore / 500, 1);
+            updateScore();
+        }
+
+        // Generar nuevas plataformas
+        generatePlatformsAbove();
+    }
+
+    // Muerte por caída
+    if (player.y - game.cameraY > H + 50) {
+        die();
+    }
+
+    // Jetpack power-up check
+    for (const plat of game.platforms) {
+        if (!plat.hasJetpack) continue;
+        const jx = plat.x + plat.width / 2;
+        const jy = plat.y - 15;
+        const px = player.x + player.width / 2;
+        const py = player.y + player.height / 2;
+        if (Math.hypot(jx - px, jy - py) < 25 && player.jetpackTimer <= 0) {
+            plat.hasJetpack = false;
+            player.jetpackTimer = 120; // ~2 segundos
+        }
+    }
+
+    // Partículas
+    game.particles.forEach(p => {
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+        p.life -= 0.03 * dt;
+    });
+    game.particles = game.particles.filter(p => p.life > 0);
+}
+
+function spawnBreakParticles(plat) {
+    for (let i = 0; i < 8; i++) {
+        game.particles.push({
+            x: plat.x + Math.random() * plat.width,
+            y: plat.y - game.cameraY + Math.random() * plat.height,
+            vx: (Math.random()-0.5)*5,
+            vy: 1 + Math.random()*3,
+            life: 0.8,
+            color: COLORS.breakable,
+            size: 3 + Math.random()*4
+        });
+    }
+}
+
+function spawnMonsterParticles(plat) {
+    for (let i = 0; i < 12; i++) {
+        game.particles.push({
+            x: plat.x + plat.width/2,
+            y: plat.y - game.cameraY - 15,
+            vx: (Math.random()-0.5)*8,
+            vy: (Math.random()-0.5)*8,
+            life: 0.7,
+            color: COLORS.monster,
+            size: 3 + Math.random()*5
+        });
+    }
+}
+
+function spawnJumpParticles(x, y) {
+    for (let i = 0; i < 6; i++) {
+        game.particles.push({
+            x: x + (Math.random()-0.5)*20,
+            y: y,
+            vx: (Math.random()-0.5)*3,
+            vy: 1 + Math.random()*2,
+            life: 0.5,
+            color: '#ff6f00',
+            size: 2 + Math.random()*3
+        });
+    }
+}
+
+// ===== RENDERIZADO =====
+
+function draw() {
+    ctx.clearRect(0, 0, W, H);
+
+    // Plataformas
+    game.platforms.forEach(plat => {
+        const sy = plat.y - game.cameraY;
+        if (sy < -50 || sy > H + 50) return;
+
+        if (plat.broken) return;
+
+        // Color según tipo
+        let color;
+        switch(plat.type) {
+            case 'moving': color = COLORS.moving; break;
+            case 'breakable': color = COLORS.breakable; break;
+            default: color = COLORS.normal;
+        }
+
+        // Plataforma
+        ctx.fillStyle = color;
+        roundRect(ctx, plat.x, sy, plat.width, plat.height, 6);
+        ctx.fill();
+
+        // Borde superior más claro
+        ctx.fillStyle = 'rgba(255,255,255,0.3)';
+        roundRect(ctx, plat.x, sy, plat.width, plat.height * 0.5, 6);
+        ctx.fill();
+
+        // Spring
+        if (plat.hasSpring) {
+            ctx.fillStyle = COLORS.spring;
+            ctx.fillRect(plat.x + plat.width/2 - 8, sy - 10, 16, 10);
+            ctx.fillStyle = '#ffcc80';
+            ctx.fillRect(plat.x + plat.width/2 - 5, sy - 8, 10, 6);
+        }
+
+        // Jetpack item
+        if (plat.hasJetpack) {
+            const jx = plat.x + plat.width/2;
+            const jy = sy - 18;
+            ctx.fillStyle = COLORS.jetpack;
+            roundRect(ctx, jx - 8, jy, 16, 18, 3);
+            ctx.fill();
+            ctx.fillStyle = '#fff';
+            ctx.fillRect(jx - 4, jy + 3, 3, 8);
+            ctx.fillRect(jx + 1, jy + 3, 3, 8);
+            // Glow
+            ctx.shadowColor = '#ffab00';
+            ctx.shadowBlur = 10;
+            ctx.fillStyle = 'rgba(255,171,0,0.3)';
+            ctx.beginPath();
+            ctx.arc(jx, jy + 9, 14, 0, Math.PI*2);
+            ctx.fill();
+            ctx.shadowBlur = 0;
+        }
+
+        // Monstruo
+        if (plat.hasMonster && plat.monsterAlive) {
+            const mx = plat.x + plat.width / 2;
+            const my = sy - 18 + Math.sin(game.score * 0.05 + plat.monsterPhase) * 3;
+
+            // Cuerpo
+            ctx.fillStyle = COLORS.monster;
+            ctx.beginPath();
+            ctx.arc(mx, my, 16, 0, Math.PI*2);
+            ctx.fill();
+
+            // Ojos
+            ctx.fillStyle = 'white';
+            ctx.beginPath();
+            ctx.arc(mx - 6, my - 4, 5, 0, Math.PI*2);
+            ctx.arc(mx + 6, my - 4, 5, 0, Math.PI*2);
+            ctx.fill();
+            ctx.fillStyle = '#333';
+            ctx.beginPath();
+            ctx.arc(mx - 5, my - 4, 2.5, 0, Math.PI*2);
+            ctx.arc(mx + 7, my - 4, 2.5, 0, Math.PI*2);
+            ctx.fill();
+
+            // Boca
+            ctx.fillStyle = '#333';
+            ctx.beginPath();
+            ctx.arc(mx, my + 6, 6, 0, Math.PI);
+            ctx.fill();
+
+            // Dientes
+            ctx.fillStyle = 'white';
+            ctx.beginPath();
+            ctx.moveTo(mx - 4, my + 6);
+            ctx.lineTo(mx - 2, my + 10);
+            ctx.lineTo(mx, my + 6);
+            ctx.lineTo(mx + 2, my + 10);
+            ctx.lineTo(mx + 4, my + 6);
+            ctx.fill();
+        }
+    });
+
+    // Jugador
+    if (!player.dead) {
+        const px = player.x;
+        const py = player.y - game.cameraY;
+        const cx = px + player.width / 2;
+        const cy = py + player.height / 2;
+
+        ctx.save();
+        ctx.translate(cx, cy);
+        if (!player.facingRight) ctx.scale(-1, 1);
+
+        // Jetpack visual
+        if (player.jetpackTimer > 0) {
+            ctx.fillStyle = '#ff6f00';
+            roundRect(ctx, -18, -8, 8, 20, 2);
+            ctx.fill();
+        }
+
+        // Cuerpo
+        ctx.fillStyle = '#7cb342';
+        ctx.beginPath();
+        ctx.ellipse(0, 2, 13, 15, 0, 0, Math.PI*2);
+        ctx.fill();
+
+        // Patas
+        ctx.strokeStyle = '#558b2f';
+        ctx.lineWidth = 3;
+        ctx.lineCap = 'round';
+        // Izquierda
+        ctx.beginPath();
+        ctx.moveTo(-8, 12);
+        ctx.lineTo(-12, 18);
+        ctx.lineTo(-6, 18);
+        ctx.stroke();
+        // Derecha
+        ctx.beginPath();
+        ctx.moveTo(8, 12);
+        ctx.lineTo(12, 18);
+        ctx.lineTo(6, 18);
+        ctx.stroke();
+
+        // Ojos (grandes, estilo doodle)
+        ctx.fillStyle = 'white';
+        ctx.beginPath();
+        ctx.arc(4, -5, 7, 0, Math.PI*2);
+        ctx.arc(-6, -5, 7, 0, Math.PI*2);
+        ctx.fill();
+
+        // Pupilas
+        ctx.fillStyle = '#333';
+        ctx.beginPath();
+        ctx.arc(6, -5, 3, 0, Math.PI*2);
+        ctx.arc(-4, -5, 3, 0, Math.PI*2);
+        ctx.fill();
+
+        // Nariz/boca
+        ctx.fillStyle = '#558b2f';
+        ctx.beginPath();
+        ctx.ellipse(8, 2, 4, 3, 0, 0, Math.PI*2);
+        ctx.fill();
+
+        ctx.restore();
+    }
+
+    // Partículas
+    game.particles.forEach(p => {
+        ctx.globalAlpha = Math.max(0, p.life);
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size * p.life, 0, Math.PI*2);
+        ctx.fill();
+    });
+    ctx.globalAlpha = 1;
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y);
+    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+    ctx.lineTo(x + w, y + h - r);
+    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+    ctx.lineTo(x + r, y + h);
+    ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+    ctx.lineTo(x, y + r);
+    ctx.quadraticCurveTo(x, y, x + r, y);
+    ctx.closePath();
+}
+
+// ===== INPUT =====
+
+window.addEventListener('keydown', e => {
+    if (e.code === 'ArrowLeft' || e.code === 'KeyA') keys.left = true;
+    if (e.code === 'ArrowRight' || e.code === 'KeyD') keys.right = true;
+});
+
+window.addEventListener('keyup', e => {
+    if (e.code === 'ArrowLeft' || e.code === 'KeyA') keys.left = false;
+    if (e.code === 'ArrowRight' || e.code === 'KeyD') keys.right = false;
+});
+
+// Touch: tocar lado izquierdo/derecho
+document.addEventListener('touchstart', e => {
+    if (!game.running) return;
+    for (const touch of e.changedTouches) {
+        if (touch.clientX < W / 2) keys.left = true;
+        else keys.right = true;
+    }
+    document.getElementById('hint').style.display = 'none';
+}, { passive: true });
+
+document.addEventListener('touchend', e => {
+    for (const touch of e.changedTouches) {
+        if (touch.clientX < W / 2) keys.left = false;
+        else keys.right = false;
+    }
+}, { passive: true });
+
+// Mouse click para desktop
+document.addEventListener('mousedown', e => {
+    if (!game.running) return;
+    if (e.clientX < W / 2) keys.left = true;
+    else keys.right = true;
+    document.getElementById('hint').style.display = 'none';
+});
+
+document.addEventListener('mouseup', () => {
+    keys.left = false;
+    keys.right = false;
+});
+
+// ===== INIT =====
+
+canvas = document.getElementById('canvas');
+ctx = canvas.getContext('2d');
+
+function resize() {
+    W = window.innerWidth;
+    H = window.innerHeight;
+    canvas.width = W;
+    canvas.height = H;
+}
+window.addEventListener('resize', resize);
+resize();
+
+// Dibujar fondo inicial
+ctx.fillStyle = COLORS.bg;
+ctx.fillRect(0, 0, W, H);
+
+</script>
+</body>
+</html>

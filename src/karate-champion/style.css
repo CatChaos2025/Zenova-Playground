@@ -1,0 +1,7 @@
+*{margin:0;padding:0;box-sizing:border-box;user-select:none}
+body{background:#1a0a00;display:flex;justify-content:center;align-items:center;min-height:100vh;font-family:Arial,sans-serif;color:#fff;overflow:hidden;padding:10px}
+.game{text-align:center;width:600px;max-width:95vw}
+h1{font-size:2em;color:#ff6b35;text-shadow:0 0 15px #ff6b35;margin-bottom:8px}
+canvas{border:3px solid #ff6b35;border-radius:10px;display:block;margin:0 auto;max-width:100%;background:#2d1810}
+.controles{margin-top:8px;display:flex;justify-content:center;gap:8px;flex-wrap:wrap;font-size:0.85em}
+.key{background:rgba(255,107,53,0.2);border:2px solid #ff6b35;color:#ff6b35;padding:4px 10px;border-radius:6px;font-weight:bold}

@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Buscaminas Clásico</title>
+    <style>
+        :root {
+            --bg: #c0c0c0; --border-light: #fff; --border-dark: #808080;
+            --cell-size: 28px; --revealed-bg: #d0d0d0;
+        }
+        * { box-sizing: border-box; user-select: none; -webkit-user-select: none; }
+        body {
+            background: #008080; font-family: 'Segoe UI', Tahoma, sans-serif;
+            display: flex; flex-direction: column; align-items: center;
+            justify-content: center; min-height: 100vh; margin: 0; padding: 10px;
+        }
+        .game-window {
+            background: var(--bg); padding: 6px;
+            border-top: 3px solid var(--border-light); border-left: 3px solid var(--border-light);
+            border-bottom: 3px solid var(--border-dark); border-right: 3px solid var(--border-dark);
+            display: inline-block;
+        }
+        /* Header con contadores y cara */
+        .header {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 4px 6px; margin-bottom: 6px;
+            border-top: 2px solid var(--border-dark); border-left: 2px solid var(--border-dark);
+            border-bottom: 2px solid var(--border-light); border-right: 2px solid var(--border-light);
+        }
+        .counter {
+            background: #000; color: #f00; font-family: 'Courier New', monospace;
+            font-size: 22px; font-weight: bold; padding: 2px 6px; min-width: 50px;
+            text-align: center; letter-spacing: 2px;
+            border-top: 1px solid var(--border-dark); border-left: 1px solid var(--border-dark);
+            border-bottom: 1px solid var(--border-light); border-right: 1px solid var(--border-light);
+        }
+        .face-btn {
+            width: 36px; height: 36px; font-size: 20px; cursor: pointer;
+            background: var(--bg); border: none;
+            border-top: 2px solid var(--border-light); border-left: 2px solid var(--border-light);
+            border-bottom: 2px solid var(--border-dark); border-right: 2px solid var(--border-dark);
+            display: flex; align-items: center; justify-content: center;
+        }
+        .face-btn:active {
+            border-top: 2px solid var(--border-dark); border-left: 2px solid var(--border-dark);
+            border-bottom: 2px solid var(--border-light); border-right: 2px solid var(--border-light);
+        }
+        /* Tablero */
+        #board {
+            display: grid; gap: 0;
+            border-top: 3px solid var(--border-dark); border-left: 3px solid var(--border-dark);
+            border-bottom: 3px solid var(--border-light); border-right: 3px solid var(--border-light);
+        }
+        .cell {
+            width: var(--cell-size); height: var(--cell-size);
+            background: var(--bg); font-size: 16px; font-weight: bold;
+            display: flex; align-items: center; justify-content: center;
+            cursor: default; line-height: 1;
+            border-top: 2px solid var(--border-light); border-left: 2px solid var(--border-light);
+            border-bottom: 2px solid var(--border-dark); border-right: 2px solid var(--border-dark);
+        }
+        .cell.revealed {
+            background: var(--revealed-bg); border: 1px solid #999;
+        }
+        .cell.mine-hit { background: #f00; }
+        .cell.flagged { cursor: pointer; }
+        /* Colores de números clásicos */
+        .c1{color:#0000ff} .c2{color:#008000} .c3{color:#ff0000} .c4{color:#000080}
+        .c5{color:#800000} .c6{color:#008080} .c7{color:#000000} .c8{color:#808080}
+
+        /* Selector de dificultad */
+        .difficulty {
+            margin-top: 12px; display: flex; gap: 8px;
+        }
+        .difficulty button {
+            padding: 6px 14px; font-size: 13px; cursor: pointer;
+            background: var(--bg); border: 2px outset var(--bg);
+            font-family: inherit; font-weight: bold;
+        }
+        .difficulty button.active {
+            border-style: inset; background: #a0a0a0;
+        }
+    </style>
+</head>
+<body>
+    <div class="game-window">
+        <div class="header">
+            <div class="counter" id="mine-count">000</div>
+            <button class="face-btn" id="face" onclick="newGame()">😊</button>
+            <div class="counter" id="timer">000</div>
+        </div>
+        <div id="board"></div>
+    </div>
+
+    <div class="difficulty">
+        <button class="active" onclick="setDifficulty('easy')">Fácil</button>
+        <button onclick="setDifficulty('medium')">Medio</button>
+        <button onclick="setDifficulty('hard')">Difícil</button>
+    </div>
+
+<script>
+/**
+ * BUSCAMINAS CLÁSICO
+ * - Primer clic siempre seguro (generación post-click)
+ * - Click derecho / doble-tap para banderas
+ * - Revelado en cascada automático
+ * - Detección de victoria por banderas correctas O celdas seguras reveladas
+ */
+
+const DIFFICULTIES = {
+    easy:   { rows: 9,  cols: 9,  mines: 10 },
+    medium: { rows: 16, cols: 16, mines: 40 },
+    hard:   { rows: 16, cols: 30, mines: 99 }
+};
+
+let config = DIFFICULTIES.easy;
+let grid = [];       // [{mine, revealed, flagged, count}]
+let gameState = 'idle'; // idle | playing | won | lost
+let flagsPlaced = 0;
+let revealedCount = 0;
+let timerVal = 0;
+let timerInterval = null;
+let firstClick = true;
+
+const boardEl = document.getElementById('board');
+const mineCountEl = document.getElementById('mine-count');
+const timerEl = document.getElementById('timer');
+const faceEl = document.getElementById('face');
+
+// ─── Generación del tablero (primer clic seguro) ─────────────
+function createGrid(safeR, safeC) {
+    const { rows, cols, mines } = config;
+    grid = Array.from({ length: rows * cols }, () => ({
+        mine: false, revealed: false, flagged: false, count: 0
+    }));
+
+    // Zona segura: 3x3 alrededor del primer clic
+    const safeZone = new Set();
+    for (let dr = -1; dr <= 1; dr++) {
+        for (let dc = -1; dc <= 1; dc++) {
+            const nr = safeR + dr, nc = safeC + dc;
+            if (nr >= 0 && nr < rows && nc >= 0 && nc < cols) {
+                safeZone.add(nr * cols + nc);
+            }
+        }
+    }
+
+    // Colocar minas aleatoriamente fuera de zona segura
+    let placed = 0;
+    while (placed < mines) {
+        const idx = Math.floor(Math.random() * rows * cols);
+        if (!grid[idx].mine && !safeZone.has(idx)) {
+            grid[idx].mine = true;
+            placed++;
+        }
+    }
+
+    // Calcular números adyacentes
+    for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+            if (grid[r * cols + c].mine) continue;
+            let count = 0;
+            forNeighbors(r, c, (nr, nc) => {
+                if (grid[nr * cols + nc].mine) count++;
+            });
+            grid[r * cols + c].count = count;
+        }
+    }
+}
+
+function forNeighbors(r, c, fn) {
+    for (let dr = -1; dr <= 1; dr++) {
+        for (let dc = -1; dc <= 1; dc++) {
+            if (dr === 0 && dc === 0) continue;
+            const nr = r + dr, nc = c + dc;
+            if (nr >= 0 && nr < config.rows && nc >= 0 && nc < config.cols) {
+                fn(nr, nc);
+            }
+        }
+    }
+}
+
+// ─── Renderizado ─────────────────────────────────────────────
+function renderBoard() {
+    boardEl.style.gridTemplateColumns = `repeat(${config.cols}, var(--cell-size))`;
+    boardEl.innerHTML = '';
+    grid.forEach((cell, idx) => {
+        const el = document.createElement('div');
+        el.className = 'cell';
+        el.dataset.idx = idx;
+
+        if (cell.revealed) {
+            el.classList.add('revealed');
+            if (cell.mine) {
+                el.textContent = '💣';
+                if (cell.hitMine) el.classList.add('mine-hit');
+            } else if (cell.count > 0) {
+                el.textContent = cell.count;
+                el.classList.add(`c${cell.count}`);
+            }
+        } else if (cell.flagged) {
+            el.textContent = '🚩';
+            el.classList.add('flagged');
+        }
+
+        // Eventos
+        el.addEventListener('mousedown', e => onCellDown(idx, e));
+        el.addEventListener('mouseup', () => faceEl.textContent = gameState === 'playing' ? '😊' : faceEl.textContent);
+        el.addEventListener('contextmenu', e => { e.preventDefault(); toggleFlag(idx); });
+
+        // Soporte táctil largo para bandera
+        let longPressTimer;
+        el.addEventListener('touchstart', e => {
+            longPressTimer = setTimeout(() => { e.preventDefault(); toggleFlag(idx); }, 400);
+        }, { passive: false });
+        el.addEventListener('touchend', () => clearTimeout(longPressTimer));
+        el.addEventListener('touchmove', () => clearTimeout(longPressTimer));
+
+        boardEl.appendChild(el);
+    });
+}
+
+function updateCellVisual(idx) {
+    const cell = grid[idx];
+    const el = boardEl.children[idx];
+    el.className = 'cell';
+    el.textContent = '';
+
+    if (cell.revealed) {
+        el.classList.add('revealed');
+        if (cell.mine) {
+            el.textContent = '💣';
+            if (cell.hitMine) el.classList.add('mine-hit');
+        } else if (cell.count > 0) {
+            el.textContent = cell.count;
+            el.classList.add(`c${cell.count}`);
+        }
+    } else if (cell.flagged) {
+        el.textContent = '🚩';
+        el.classList.add('flagged');
+    }
+}
+
+// ─── Lógica del juego ────────────────────────────────────────
+function onCellDown(idx, e) {
+    if (gameState === 'won' || gameState === 'lost') return;
+    if (e.button === 2) return; // Click derecho manejado en contextmenu
+
+    // Cara sorprendida al presionar
+    if (e.button === 0) faceEl.textContent = '😮';
+
+    if (firstClick) {
+        const r = Math.floor(idx / config.cols);
+        const c = idx % config.cols;
+        createGrid(r, c);
+        firstClick = false;
+        startTimer();
+        gameState = 'playing';
+    }
+
+    const cell = grid[idx];
+    if (cell.flagged) return;
+
+    if (cell.revealed) {
+        // Chord: si ya está revelada y tiene número correcto de banderas alrededor, revelar vecinos
+        chordReveal(idx);
+    } else {
+        revealCell(idx);
+    }
+}
+
+function revealCell(idx) {
+    const cell = grid[idx];
+    if (cell.revealed || cell.flagged) return;
+
+    cell.revealed = true;
+    revealedCount++;
+    updateCellVisual(idx);
+
+    if (cell.mine) {
+        gameOver(false, idx);
+        return;
+    }
+
+    // Cascada si es 0
+    if (cell.count === 0) {
+        const r = Math.floor(idx / config.cols);
+        const c = idx % config.cols;
+        forNeighbors(r, c, (nr, nc) => revealCell(nr * config.cols + nc));
+    }
+
+    checkWin();
+}
+
+function chordReveal(idx) {
+    const cell = grid[idx];
+    if (!cell.revealed || cell.count === 0) return;
+
+    const r = Math.floor(idx / config.cols);
+    const c = idx % config.cols;
+    let adjFlags = 0;
+    forNeighbors(r, c, (nr, nc) => {
+        if (grid[nr * config.cols + nc].flagged) adjFlags++;
+    });
+
+    if (adjFlags === cell.count) {
+        forNeighbors(r, c, (nr, nc) => {
+            const nIdx = nr * config.cols + nc;
+            if (!grid[nIdx].revealed && !grid[nIdx].flagged) revealCell(nIdx);
+        });
+    }
+}
+
+function toggleFlag(idx) {
+    if (gameState !== 'playing' && gameState !== 'idle') return;
+    const cell = grid[idx];
+    if (cell.revealed) return;
+
+    cell.flagged = !cell.flagged;
+    flagsPlaced += cell.flagged ? 1 : -1;
+    updateCellVisual(idx);
+    updateMineCounter();
+    checkWin();
+}
+
+// ─── Victoria / Derrota ──────────────────────────────────────
+function checkWin() {
+    const totalSafe = config.rows * config.cols - config.mines;
+    if (revealedCount === totalSafe) {
+        gameOver(true);
+    }
+}
+
+function gameOver(won, hitIdx = null) {
+    stopTimer();
+    gameState = won ? 'won' : 'lost';
+    faceEl.textContent = won ? '😎' : '😵';
+
+    if (!won && hitIdx !== null) {
+        grid[hitIdx].hitMine = true;
+        updateCellVisual(hitIdx);
+    }
+
+    // Revelar todas las minas al perder
+    if (!won) {
+        grid.forEach((cell, idx) => {
+            if (cell.mine && !cell.flagged) {
+                cell.revealed = true;
+                updateCellVisual(idx);
+            }
+            // Bandera incorrecta marcada con X
+            if (!cell.mine && cell.flagged) {
+                const el = boardEl.children[idx];
+                el.textContent = '❌';
+                el.classList.add('revealed');
+            }
+        });
+    }
+
+    // Marcar todas las minas con bandera al ganar
+    if (won) {
+        grid.forEach((cell, idx) => {
+            if (cell.mine && !cell.flagged) {
+                cell.flagged = true;
+                updateCellVisual(idx);
+            }
+        });
+        flagsPlaced = config.mines;
+        updateMineCounter();
+    }
+}
+
+// ─── Timer y contadores ──────────────────────────────────────
+function startTimer() {
+    timerVal = 0;
+    clearInterval(timerInterval);
+    timerInterval = setInterval(() => {
+        timerVal++;
+        if (timerVal > 999) timerVal = 999;
+        timerEl.textContent = String(timerVal).padStart(3, '0');
+    }, 1000);
+}
+
+function stopTimer() {
+    clearInterval(timerInterval);
+}
+
+function updateMineCounter() {
+    const remaining = config.mines - flagsPlaced;
+    mineCountEl.textContent = String(Math.max(-99, Math.min(999, remaining))).padStart(3, '0');
+}
+
+// ─── Control de partida ──────────────────────────────────────
+function newGame() {
+    stopTimer();
+    timerVal = 0;
+    timerEl.textContent = '000';
+    flagsPlaced = 0;
+    revealedCount = 0;
+    firstClick = true;
+    gameState = 'idle';
+    faceEl.textContent = '😊';
+    updateMineCounter();
+
+    // Crear grid visual vacío (sin minas aún)
+    grid = Array.from({ length: config.rows * config.cols }, () => ({
+        mine: false, revealed: false, flagged: false, count: 0
+    }));
+    renderBoard();
+}
+
+function setDifficulty(level) {
+    config = DIFFICULTIES[level];
+    document.querySelectorAll('.difficulty button').forEach(b => b.classList.remove('active'));
+    event.target.classList.add('active');
+    newGame();
+}
+
+// Iniciar
+newGame();
+</script>
+</body>
+</html>

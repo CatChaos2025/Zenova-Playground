@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Natación Olímpica</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="game">
+    <h1>🏊 NATACIÓN OLÍMPICA</h1>
+    <div class="canvas-wrap">
+        <canvas id="c" width="700" height="350"></canvas>
+        <div class="overlay" id="overlay">
+            <h2>🏊 NATACIÓN OLÍMPICA</h2>
+            <p>Alterna A y D para nadar rápido<br>¡Mantén el ritmo sin cansarte!</p>
+            <button onclick="startGame()">¡ZAMBULLIDA!</button>
+        </div>
+    </div>
+    <div class="controles">
+        <span class="key">A</span> Brazo izquierdo
+        <span class="key">D</span> Brazo derecho
+        <span class="key">ESPACIO</span> Turbo (gasta energía)
+    </div>
+</div>
+<script src="script.js"></script>
+</body>
+</html>

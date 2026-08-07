@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Laberinto vs IA</title>
+<style>
+    :root {
+        --bg: #1a1a2e;
+        --panel: #16213e;
+        --wall: #2c3e50;
+        --path: #ecf0f1;
+        --player: #e63946;
+        --enemy: #9b59b6;
+        --goal: #2ecc71;
+        --cell: min(40px, 8vw);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+        font-family: system-ui, sans-serif;
+        background: var(--bg); color: white;
+        min-height: 100vh;
+        display: flex; flex-direction: column; align-items: center;
+        padding: 15px 10px; user-select: none;
+    }
+    h1 { font-size: 1.5rem; margin-bottom: 8px; }
+    .sub { color: #aaa; font-size: 0.85rem; margin-bottom: 12px; }
+
+    .game-area {
+        display: flex; gap: 20px; flex-wrap: wrap;
+        justify-content: center; align-items: flex-start;
+    }
+
+    #maze {
+        display: grid;
+        background: var(--wall);
+        padding: 4px;
+        border-radius: 6px;
+        box-shadow: 0 6px 20px rgba(0,0,0,.4);
+    }
+
+    .cell {
+        width: var(--cell); height: var(--cell);
+        background: var(--path);
+        position: relative;
+    }
+    .cell.wall { background: var(--wall); }
+
+    .entity {
+        position: absolute;
+        width: 70%; height: 70%;
+        top: 15%; left: 15%;
+        border-radius: 50%;
+        box-shadow: 0 2px 4px rgba(0,0,0,.4);
+        z-index: 2;
+    }
+    .player { background: radial-gradient(circle at 30% 30%, #ff6b6b, var(--player)); }
+    .enemy { background: radial-gradient(circle at 30% 30%, #c39bd3, var(--enemy)); }
+    .goal { 
+        background: radial-gradient(circle at 30% 30%, #58d68d, var(--goal));
+        animation: pulse 1.5s infinite;
+    }
+
+    @keyframes pulse {
+        0%, 100% { transform: scale(1); opacity: 1; }
+        50% { transform: scale(1.15); opacity: 0.8; }
+    }
+
+    .panel {
+        background: var(--panel); padding: 15px; border-radius: 8px; width: 200px;
+        box-shadow: 0 4px 15px rgba(0,0,0,.3);
+    }
+    .stat { margin-bottom: 12px; }
+    .label { color: #aaa; font-size: .75rem; text-transform: uppercase; }
+    .value { font-size: 1.1rem; font-weight: bold; margin-top: 3px; }
+
+    button {
+        width: 100%; padding: 9px; margin-top: 6px;
+        border: none; border-radius: 5px; font-size: .9rem; cursor: pointer;
+        background: var(--player); color: white; font-weight: bold;
+    }
+    button:hover { filter: brightness(1.15); }
+
+    .controls {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 6px;
+        margin-top: 12px;
+    }
+    .ctrl-btn {
+        padding: 12px;
+        background: #34495e;
+        border: none;
+        border-radius: 5px;
+        color: white;
+        font-size: 1.2rem;
+        cursor: pointer;
+    }
+    .ctrl-btn:hover { background: #4a6278; }
+    .ctrl-btn:active { transform: scale(0.95); }
+
+    .rules {
+        margin-top: 12px; padding-top: 10px; border-top: 1px solid #333;
+        font-size: .8rem; color: #bbb; line-height: 1.5;
+    }
+
+    @media (max-width: 600px) {
+        .panel { width: 90vw; max-width: 280px; }
+    }
+</style>
+</head>
+<body>
+
+<h1>🌀 Laberinto</h1>
+<div class="sub">Llega a la meta · Evita al enemigo</div>
+
+<div class="game-area">
+    <div id="maze"></div>
+    <div class="panel">
+        <div class="stat">
+            <div class="label">Estado</div>
+            <div id="status" class="value">¡Juega!</div>
+        </div>
+        <div class="stat">
+            <div class="label">Movimientos</div>
+            <div id="moves" class="value">0</div>
+        </div>
+        <div class="stat">
+            <div class="label">Tiempo</div>
+            <div id="time" class="value">0s</div>
+        </div>
+        <button id="newBtn">Nuevo Laberinto</button>
+        
+        <div class="controls">
+            <div></div>
+            <button class="ctrl-btn" data-dir="up">↑</button>
+            <div></div>
+            <button class="ctrl-btn" data-dir="left">←</button>
+            <button class="ctrl-btn" data-dir="down">↓</button>
+            <button class="ctrl-btn" data-dir="right">→</button>
+        </div>
+
+        <div class="rules">
+            <b>⌨️ Flechas</b> o botones para moverte.<br>
+            <b>🟢 Meta:</b> llega a la verde.<br>
+            <b>🟣 Enemigo:</b> te persigue. ¡No te atrape!
+        </div>
+    </div>
+</div>
+
+<script>
+const ROWS = 11, COLS = 11;
+let maze = [], player = {}, enemy = {}, goal = {};
+let moves = 0, startTime = 0, timer = null, gameActive = false;
+
+const mazeEl = document.getElementById('maze');
+const statusEl = document.getElementById('status');
+const movesEl = document.getElementById('moves');
+const timeEl = document.getElementById('time');
+
+// Generar laberinto con DFS (Depth-First Search)
+function generateMaze() {
+    // Inicializar todo como paredes
+    maze = Array.from({length: ROWS}, () => Array(COLS).fill(1));
+    
+    const stack = [];
+    const startR = 1, startC = 1;
+    maze[startR][startC] = 0;
+    stack.push([startR, startC]);
+    
+    const dirs = [[0,2],[0,-2],[2,0],[-2,0]];
+    
+    while (stack.length > 0) {
+        const [r, c] = stack[stack.length - 1];
+        const neighbors = [];
+        
+        for (const [dr, dc] of dirs) {
+            const nr = r + dr, nc = c + dc;
+            if (nr > 0 && nr < ROWS-1 && nc > 0 && nc < COLS-1 && maze[nr][nc] === 1) {
+                neighbors.push([nr, nc, dr/2, dc/2]);
+            }
+        }
+        
+        if (neighbors.length > 0) {
+            const [nr, nc, wr, wc] = neighbors[Math.floor(Math.random() * neighbors.length)];
+            maze[r + wr][c + wc] = 0;
+            maze[nr][nc] = 0;
+            stack.push([nr, nc]);
+        } else {
+            stack.pop();
+        }
+    }
+    
+    // Asegurar salida en la esquina inferior derecha
+    maze[ROWS-2][COLS-2] = 0;
+    maze[ROWS-2][COLS-3] = 0;
+}
+
+function initGame() {
+    generateMaze();
+    
+    // Posiciones iniciales
+    player = {r: 1, c: 1};
+    enemy = {r: ROWS-2, c: 1};
+    goal = {r: ROWS-2, c: COLS-2};
+    
+    // Asegurar que las posiciones sean caminos
+    maze[player.r][player.c] = 0;
+    maze[enemy.r][enemy.c] = 0;
+    maze[goal.r][goal.c] = 0;
+    
+    moves = 0;
+    startTime = Date.now();
+    gameActive = true;
+    
+    if (timer) clearInterval(timer);
+    timer = setInterval(updateTime, 1000);
+    
+    buildMaze();
+    updateUI();
+}
+
+function buildMaze() {
+    mazeEl.innerHTML = '';
+    mazeEl.style.gridTemplateColumns = `repeat(${COLS}, var(--cell))`;
+    mazeEl.style.gridTemplateRows = `repeat(${ROWS}, var(--cell))`;
+    
+    for (let r = 0; r < ROWS; r++) {
+        for (let c = 0; c < COLS; c++) {
+            const cell = document.createElement('div');
+            cell.className = 'cell' + (maze[r][c] === 1 ? ' wall' : '');
+            cell.dataset.r = r;
+            cell.dataset.c = c;
+            mazeEl.appendChild(cell);
+        }
+    }
+    render();
+}
+
+function render() {
+    // Limpiar entidades anteriores
+    document.querySelectorAll('.entity').forEach(e => e.remove());
+    
+    // Dibujar jugador
+    const pCell = getCell(player.r, player.c);
+    if (pCell) {
+        const p = document.createElement('div');
+        p.className = 'entity player';
+        pCell.appendChild(p);
+    }
+    
+    // Dibujar enemigo
+    const eCell = getCell(enemy.r, enemy.c);
+    if (eCell) {
+        const e = document.createElement('div');
+        e.className = 'entity enemy';
+        eCell.appendChild(e);
+    }
+    
+    // Dibujar meta
+    const gCell = getCell(goal.r, goal.c);
+    if (gCell) {
+        const g = document.createElement('div');
+        g.className = 'entity goal';
+        gCell.appendChild(g);
+    }
+}
+
+function getCell(r, c) {
+    return mazeEl.children[r * COLS + c];
+}
+
+function updateUI() {
+    movesEl.textContent = moves;
+}
+
+function updateTime() {
+    if (!gameActive) return;
+    const elapsed = Math.floor((Date.now() - startTime) / 1000);
+    timeEl.textContent = elapsed + 's';
+}
+
+function movePlayer(dr, dc) {
+    if (!gameActive) return;
+    
+    const nr = player.r + dr, nc = player.c + dc;
+    if (nr >= 0 && nr < ROWS && nc >= 0 && nc < COLS && maze[nr][nc] === 0) {
+        player.r = nr;
+        player.c = nc;
+        moves++;
+        render();
+        updateUI();
+        
+        // Verificar victoria
+        if (player.r === goal.r && player.c === goal.c) {
+            endGame(true);
+            return;
+        }
+        
+        // Turno del enemigo
+        setTimeout(moveEnemy, 200);
+    }
+}
+
+function moveEnemy() {
+    if (!gameActive) return;
+    
+    // IA simple: perseguir al jugador usando BFS para encontrar camino más corto
+    const path = findPath(enemy, player);
+    if (path && path.length > 1) {
+        enemy.r = path[1].r;
+        enemy.c = path[1].c;
+        render();
+        
+        // Verificar derrota
+        if (enemy.r === player.r && enemy.c === player.c) {
+            endGame(false);
+        }
+    }
+}
+
+function findPath(start, end) {
+    const visited = Array.from({length: ROWS}, () => Array(COLS).fill(false));
+    const queue = [{r: start.r, c: start.c, path: [{r: start.r, c: start.c}]}];
+    visited[start.r][start.c] = true;
+    
+    const dirs = [[-1,0],[1,0],[0,-1],[0,1]];
+    
+    while (queue.length > 0) {
+        const {r, c, path} = queue.shift();
+        
+        if (r === end.r && c === end.c) return path;
+        
+        for (const [dr, dc] of dirs) {
+            const nr = r + dr, nc = c + dc;
+            if (nr >= 0 && nr < ROWS && nc >= 0 && nc < COLS && 
+                !visited[nr][nc] && maze[nr][nc] === 0) {
+                visited[nr][nc] = true;
+                queue.push({r: nr, c: nc, path: [...path, {r: nr, c: nc}]});
+            }
+        }
+    }
+    return null;
+}
+
+function endGame(won) {
+    gameActive = false;
+    clearInterval(timer);
+    statusEl.textContent = won ? '🎉 ¡Ganaste!' : '💀 ¡Te atraparon!';
+    statusEl.style.color = won ? '#2ecc71' : '#e63946';
+}
+
+// Controles de teclado
+document.addEventListener('keydown', (e) => {
+    if (!gameActive) return;
+    switch(e.key) {
+        case 'ArrowUp': movePlayer(-1, 0); break;
+        case 'ArrowDown': movePlayer(1, 0); break;
+        case 'ArrowLeft': movePlayer(0, -1); break;
+        case 'ArrowRight': movePlayer(0, 1); break;
+    }
+});
+
+// Controles táctiles
+document.querySelectorAll('.ctrl-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        const dir = btn.dataset.dir;
+        switch(dir) {
+            case 'up': movePlayer(-1, 0); break;
+            case 'down': movePlayer(1, 0); break;
+            case 'left': movePlayer(0, -1); break;
+            case 'right': movePlayer(0, 1); break;
+        }
+    });
+});
+
+document.getElementById('newBtn').addEventListener('click', () => {
+    statusEl.textContent = '¡Juega!';
+    statusEl.style.color = 'white';
+    initGame();
+});
+
+// Iniciar juego
+initGame();
+</script>
+</body>
+</html>

@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rugby Touchdown</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="contenedor">
+        <div class="panel-superior">
+            <div class="score-box verde">
+                <span class="score-label">YARDAS</span>
+                <span class="score-value" id="yardas">0</span>
+            </div>
+            <div class="score-box rojo">
+                <span class="score-label">TOUCHDOWNS</span>
+                <span class="score-value" id="touchdowns">0</span>
+            </div>
+            <div class="score-box azul">
+                <span class="score-label">VIDAS</span>
+                <span class="score-value" id="vidas">❤️❤️❤️</span>
+            </div>
+            <div class="score-box oro">
+                <span class="score-label">RÉCORD</span>
+                <span class="score-value" id="record">0</span>
+            </div>
+        </div>
+        
+        <canvas id="gameCanvas" width="600" height="400"></canvas>
+        
+        <div class="controles-info">
+            <span class="key">←→↑↓</span> Mover
+            <span class="key">ESPACIO</span> Sprint
+        </div>
+    </div>
+    
+    <script src="script.js"></script>
+</body>
+</html>

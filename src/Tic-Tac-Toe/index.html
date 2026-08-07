@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tic-Tac-Toe vs IA Invencible</title>
+    <style>
+        :root {
+            --bg: #0f172a;
+            --cell-bg: #1e293b;
+            --cell-hover: #334155;
+            --x-color: #38bdf8;
+            --o-color: #f43f5e;
+            --text: #f1f5f9;
+            --border-radius: 12px;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
+
+        body {
+            background: var(--bg);
+            color: var(--text);
+            font-family: system-ui, -apple-system, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            gap: 20px;
+        }
+
+        h1 { font-size: 2rem; letter-spacing: 1px; }
+
+        .status {
+            font-size: 1.2rem;
+            font-weight: 600;
+            min-height: 1.5em;
+            opacity: 0.9;
+        }
+
+        .board {
+            display: grid;
+            grid-template-columns: repeat(3, 100px);
+            grid-template-rows: repeat(3, 100px);
+            gap: 8px;
+        }
+
+        .cell {
+            background: var(--cell-bg);
+            border-radius: var(--border-radius);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 3rem;
+            font-weight: 800;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+        }
+
+        .cell:hover:not(.taken) { background: var(--cell-hover); transform: scale(1.02); }
+        .cell.taken { cursor: default; }
+        .cell.x { color: var(--x-color); }
+        .cell.o { color: var(--o-color); }
+
+        /* Animación de aparición */
+        .cell.pop { animation: popIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1); }
+        @keyframes popIn {
+            from { transform: scale(0); opacity: 0; }
+            to { transform: scale(1); opacity: 1; }
+        }
+
+        /* Resaltar línea ganadora */
+        .cell.winner {
+            background: rgba(255,255,255,0.1);
+            box-shadow: inset 0 0 20px rgba(255,255,255,0.1);
+        }
+
+        .controls { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+
+        button {
+            padding: 10px 24px;
+            border: 1px solid rgba(255,255,255,0.2);
+            background: transparent;
+            color: var(--text);
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: 0.3s;
+        }
+        button:hover { background: rgba(255,255,255,0.1); border-color: white; }
+        button.active { background: var(--x-color); border-color: var(--x-color); color: #000; font-weight: bold; }
+
+        .difficulty-label { font-size: 0.8rem; opacity: 0.6; margin-top: 5px; }
+
+        @media (max-width: 400px) {
+            .board { grid-template-columns: repeat(3, 80px); grid-template-rows: repeat(3, 80px); }
+            .cell { font-size: 2.2rem; }
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Tic-Tac-Toe vs IA</h1>
+    
+    <div class="controls">
+        <button id="btn-easy" onclick="setDifficulty('easy')">Fácil</button>
+        <button id="btn-medium" onclick="setDifficulty('medium')">Normal</button>
+        <button id="btn-hard" class="active" onclick="setDifficulty('hard')">Imposible</button>
+    </div>
+    <div class="difficulty-label" id="diff-desc">IA usa Minimax (invencible)</div>
+
+    <div class="status" id="status">Tu turno (X)</div>
+
+    <div class="board" id="board">
+        <div class="cell" data-index="0"></div>
+        <div class="cell" data-index="1"></div>
+        <div class="cell" data-index="2"></div>
+        <div class="cell" data-index="3"></div>
+        <div class="cell" data-index="4"></div>
+        <div class="cell" data-index="5"></div>
+        <div class="cell" data-index="6"></div>
+        <div class="cell" data-index="7"></div>
+        <div class="cell" data-index="8"></div>
+    </div>
+
+    <button onclick="resetGame()">Reiniciar Juego</button>
+
+<script>
+/**
+ * ESTADO DEL JUEGO
+ */
+const HUMAN = 'X';
+const AI = 'O';
+let board = Array(9).fill(null);
+let gameActive = true;
+let currentPlayer = HUMAN;
+let difficulty = 'hard'; // 'easy', 'medium', 'hard'
+
+const WIN_COMBOS = [
+    [0,1,2], [3,4,5], [6,7,8], // Filas
+    [0,3,6], [1,4,7], [2,5,8], // Columnas
+    [0,4,8], [2,4,6]           // Diagonales
+];
+
+// Elementos DOM
+const cells = document.querySelectorAll('.cell');
+const statusEl = document.getElementById('status');
+const diffDescEl = document.getElementById('diff-desc');
+const btns = { easy: document.getElementById('btn-easy'), medium: document.getElementById('btn-medium'), hard: document.getElementById('btn-hard') };
+
+/**
+ * CONTROL DE DIFICULTAD
+ */
+function setDifficulty(level) {
+    difficulty = level;
+    Object.values(btns).forEach(b => b.classList.remove('active'));
+    btns[level].classList.add('active');
+    
+    const descriptions = {
+        easy: 'IA juega completamente al azar',
+        medium: 'IA bloquea y ataca, pero comete errores',
+        hard: 'IA usa Minimax (matemáticamente invencible)'
+    };
+    diffDescEl.textContent = descriptions[level];
+    resetGame();
+}
+
+/**
+ * LÓGICA DEL JUEGO HUMANO
+ */
+cells.forEach(cell => {
+    cell.addEventListener('click', handleClick);
+});
+
+function handleClick(e) {
+    const idx = parseInt(e.target.dataset.index);
+    
+    if (!gameActive || board[idx] !== null || currentPlayer !== HUMAN) return;
+    
+    makeMove(idx, HUMAN);
+    
+    if (gameActive && currentPlayer === AI) {
+        // Pequeño delay para que se sienta natural
+        setTimeout(aiMove, 400);
+    }
+}
+
+function makeMove(idx, player) {
+    board[idx] = player;
+    const cell = cells[idx];
+    cell.textContent = player;
+    cell.classList.add('taken', player.toLowerCase(), 'pop');
+    
+    const winCombo = checkWin(board, player);
+    if (winCombo) {
+        endGame(player, winCombo);
+        return;
+    }
+    
+    if (!board.includes(null)) {
+        endGame('draw');
+        return;
+    }
+    
+    currentPlayer = player === HUMAN ? AI : HUMAN;
+    statusEl.textContent = currentPlayer === HUMAN ? 'Tu turno (X)' : 'La IA está pensando...';
+}
+
+/**
+ * INTELIGENCIA ARTIFICIAL
+ */
+function aiMove() {
+    if (!gameActive) return;
+    
+    let moveIndex;
+    
+    switch(difficulty) {
+        case 'easy':
+            moveIndex = getRandomMove();
+            break;
+        case 'medium':
+            // 70% óptimo, 30% aleatorio (comete errores a propósito)
+            moveIndex = Math.random() < 0.7 ? getBestMove() : getRandomMove();
+            break;
+        case 'hard':
+        default:
+            moveIndex = getBestMove();
+            break;
+    }
+    
+    makeMove(moveIndex, AI);
+}
+
+function getRandomMove() {
+    const available = board.map((v, i) => v === null ? i : null).filter(v => v !== null);
+    return available[Math.floor(Math.random() * available.length)];
+}
+
+/**
+ * ALGORITMO MINIMAX
+ * Evalúa recursivamente todos los futuros posibles del tablero.
+ * Retorna el índice del mejor movimiento para la IA.
+ */
+function getBestMove() {
+    let bestScore = -Infinity;
+    let move = null;
+    
+    for (let i = 0; i < 9; i++) {
+        if (board[i] === null) {
+            board[i] = AI;
+            let score = minimax(board, 0, false);
+            board[i] = null; // Deshacer
+            
+            if (score > bestScore) {
+                bestScore = score;
+                move = i;
+            }
+        }
+    }
+    return move;
+}
+
+function minimax(currentBoard, depth, isMaximizing) {
+    // Casos base: alguien ganó o empate
+    if (checkWin(currentBoard, AI)) return 10 - depth;
+    if (checkWin(currentBoard, HUMAN)) return depth - 10;
+    if (!currentBoard.includes(null)) return 0;
+    
+    if (isMaximizing) {
+        let bestScore = -Infinity;
+        for (let i = 0; i < 9; i++) {
+            if (currentBoard[i] === null) {
+                currentBoard[i] = AI;
+                let score = minimax(currentBoard, depth + 1, false);
+                currentBoard[i] = null;
+                bestScore = Math.max(score, bestScore);
+            }
+        }
+        return bestScore;
+    } else {
+        let bestScore = Infinity;
+        for (let i = 0; i < 9; i++) {
+            if (currentBoard[i] === null) {
+                currentBoard[i] = HUMAN;
+                let score = minimax(currentBoard, depth + 1, true);
+                currentBoard[i] = null;
+                bestScore = Math.min(score, bestScore);
+            }
+        }
+        return bestScore;
+    }
+}
+
+/**
+ * UTILIDADES
+ */
+function checkWin(bd, player) {
+    for (const combo of WIN_COMBOS) {
+        if (combo.every(i => bd[i] === player)) return combo;
+    }
+    return null;
+}
+
+function endGame(winner, combo) {
+    gameActive = false;
+    
+    if (winner === 'draw') {
+        statusEl.textContent = '🤝 ¡Empate!';
+    } else {
+        const name = winner === HUMAN ? '¡Ganaste!' : 'La IA gana 🤖';
+        statusEl.textContent = winner === HUMAN ? '🎉 ' + name : name;
+        
+        // Resaltar celdas ganadoras
+        if (combo) {
+            combo.forEach(i => cells[i].classList.add('winner'));
+        }
+    }
+}
+
+function resetGame() {
+    board = Array(9).fill(null);
+    gameActive = true;
+    currentPlayer = HUMAN;
+    statusEl.textContent = 'Tu turno (X)';
+    
+    cells.forEach(cell => {
+        cell.textContent = '';
+        cell.className = 'cell';
+    });
+}
+</script>
+</body>
+</html>

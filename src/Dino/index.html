@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chrome Dino - Clásico</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-color: #fff; /* Fondo blanco clásico */
+            font-family: 'Courier New', Courier, monospace;
+            overflow: hidden;
+        }
+        canvas {
+            display: block;
+            border-bottom: none; /* Sin borde extra, el suelo lo dibuja el canvas */
+            image-rendering: pixelated; /* Mantiene los píxeles nítidos */
+        }
+    </style>
+</head>
+<body>
+
+<canvas id="gameCanvas" width="800" height="250"></canvas>
+
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const groundY = canvas.height - 20;
+
+    // Configuración del juego
+    let gameSpeed = 6;
+    let gravity = 0.6;
+    let score = 0;
+    let highScore = Number(localStorage.getItem('dinoHighScore')) || 0;
+    let frame = 0;
+    let isGameOver = false;
+    let isPlaying = false;
+    let gameStarted = false;
+
+    const COLOR = '#535353'; // Gris oscuro clásico de Chrome
+
+    // El Dino se dibuja con formas simples para mantener la jugabilidad y el estilo clásico.
+    
+    const dino = {
+        x: 50,
+        y: groundY - 44,
+        width: 44,
+        height: 44,
+        originalHeight: 44,
+        duckHeight: 28,
+        dy: 0,
+        jumpPower: -12,
+        grounded: true,
+        isDucking: false,
+        runFrame: 0,
+        
+        draw: function() {
+            ctx.fillStyle = COLOR;
+            
+            if (!gameStarted || isGameOver) {
+                // Dino estático
+                this.drawStatic();
+                return;
+            }
+
+            if (this.isDucking) {
+                // Sprite agachado (más ancho, bajo)
+                // Cuerpo
+                ctx.fillRect(this.x, this.y + 20, 55, 25);
+                // Cabeza
+                ctx.fillRect(this.x + 35, this.y + 10, 25, 20);
+                // Ojo (blanco)
+                ctx.fillStyle = '#fff';
+                ctx.fillRect(this.x + 50, this.y + 15, 4, 4);
+                // Patas (animación simple)
+                ctx.fillStyle = COLOR;
+                if (Math.floor(frame / 5) % 2 === 0) {
+                    ctx.fillRect(this.x + 10, this.y + 45, 8, 10);
+                    ctx.fillRect(this.x + 30, this.y + 40, 8, 5);
+                } else {
+                    ctx.fillRect(this.x + 10, this.y + 40, 8, 5);
+                    ctx.fillRect(this.x + 30, this.y + 45, 8, 10);
+                }
+            } else {
+                // Sprite corriendo normal
+                // Cabeza y cuerpo
+                ctx.fillRect(this.x + 20, this.y, 24, 30); // Cabeza/Cuello
+                ctx.fillRect(this.x, this.y + 20, 40, 20); // Cuerpo
+                ctx.fillRect(this.x + 20, this.y + 30, 20, 17); // Muslo
+                
+                // Ojo
+                ctx.fillStyle = '#fff';
+                ctx.fillRect(this.x + 36, this.y + 6, 4, 4);
+                
+                // Boca
+                ctx.fillStyle = COLOR;
+                ctx.fillRect(this.x + 38, this.y + 18, 6, 2);
+
+                // Patas (Animación de carrera)
+                if (Math.floor(frame / 5) % 2 === 0) {
+                    // Pata izquierda atrás, derecha adelante
+                    ctx.fillRect(this.x + 5, this.y + 40, 8, 7); // Izq arriba
+                    ctx.fillRect(this.x + 25, this.y + 47, 8, 10); // Der abajo
+                } else {
+                    // Pata izquierda adelante, derecha atrás
+                    ctx.fillRect(this.x + 5, this.y + 47, 8, 10); // Izq abajo
+                    ctx.fillRect(this.x + 25, this.y + 40, 8, 7); // Der arriba
+                }
+                
+                // Brazos pequeños
+                ctx.fillRect(this.x + 30, this.y + 25, 6, 4);
+            }
+        },
+
+        drawStatic: function() {
+             // Versión estática para el inicio
+             ctx.fillStyle = COLOR;
+             ctx.fillRect(this.x + 20, this.y, 24, 30);
+             ctx.fillRect(this.x, this.y + 20, 40, 20);
+             ctx.fillRect(this.x + 20, this.y + 30, 20, 17);
+             ctx.fillStyle = '#fff';
+             ctx.fillRect(this.x + 36, this.y + 6, 4, 4);
+             ctx.fillStyle = COLOR;
+             ctx.fillRect(this.x + 5, this.y + 47, 8, 10);
+             ctx.fillRect(this.x + 25, this.y + 47, 8, 10);
+        },
+        
+        update: function() {
+            if (!this.grounded) {
+                this.dy += gravity;
+                this.y += this.dy;
+            }
+
+            if (this.y + this.height >= groundY) {
+                this.y = groundY - this.height;
+                this.dy = 0;
+                this.grounded = true;
+            } else {
+                this.grounded = false;
+            }
+
+            if (this.grounded) {
+                if (this.isDucking) {
+                    this.height = this.duckHeight;
+                    this.y = groundY - this.height;
+                } else {
+                    if (this.height !== this.originalHeight) {
+                        this.y -= this.originalHeight - this.height;
+                    }
+                    this.height = this.originalHeight;
+                }
+            }
+
+            this.draw();
+        },
+        
+        jump: function() {
+            if (this.grounded) {
+                this.dy = this.jumpPower;
+                this.grounded = false;
+                this.isDucking = false;
+            }
+        }
+    };
+
+    // Obstáculos Clásicos
+    const obstacles = [];
+    
+    class Obstacle {
+        constructor() {
+            this.type = Math.random() > 0.5 ? 'small' : 'large';
+            this.width = this.type === 'small' ? 17 : 25;
+            this.height = this.type === 'small' ? 35 : 50;
+            this.x = canvas.width;
+            this.y = canvas.height - 20 - this.height;
+            this.markedForDeletion = false;
+        }
+        
+        update() {
+            this.x -= gameSpeed;
+            if (this.x + this.width < 0) {
+                this.markedForDeletion = true;
+            }
+            this.draw();
+        }
+        
+        draw() {
+            ctx.fillStyle = COLOR;
+            // Dibujar cactus estilo pixel art
+            if (this.type === 'small') {
+                ctx.fillRect(this.x + 4, this.y, 9, this.height); // Tronco
+                ctx.fillRect(this.x, this.y + 10, 4, 10); // Brazo izq
+                ctx.fillRect(this.x + 13, this.y + 15, 4, 8); // Brazo der
+            } else {
+                ctx.fillRect(this.x + 6, this.y, 13, this.height); // Tronco
+                ctx.fillRect(this.x, this.y + 15, 6, 12); // Brazo izq
+                ctx.fillRect(this.x + 19, this.y + 20, 6, 10); // Brazo der
+            }
+        }
+    }
+
+    // Suelo punteado clásico
+    let groundX = 0;
+    function drawGround() {
+        ctx.fillStyle = COLOR;
+        ctx.fillRect(0, groundY, canvas.width, 1); // Línea base
+        
+        // Puntos del suelo que se mueven
+        groundX -= gameSpeed;
+        if (groundX <= -20) groundX = 0;
+        
+        for (let i = groundX; i < canvas.width; i += 20) {
+            if (Math.abs(i % 60) < 10) ctx.fillRect(i, groundY + 5, 8, 2);
+            if (Math.abs(i % 40) > 20) ctx.fillRect(i + 5, groundY + 10, 4, 1);
+        }
+    }
+
+    // Nubes clásicas
+    const clouds = [];
+    class Cloud {
+        constructor() {
+            this.x = canvas.width + Math.random() * 200;
+            this.y = Math.random() * 80 + 20;
+            this.speed = gameSpeed * 0.1;
+        }
+        update() {
+            this.x -= this.speed;
+            if (this.x < -50) {
+                this.x = canvas.width + Math.random() * 200;
+                this.y = Math.random() * 80 + 20;
+            }
+            this.draw();
+        }
+        draw() {
+            ctx.fillStyle = '#dcdcdc'; // Gris muy claro
+            // Forma de nube pixelada simple
+            ctx.fillRect(this.x, this.y, 30, 10);
+            ctx.fillRect(this.x + 5, this.y - 5, 20, 5);
+            ctx.fillRect(this.x + 10, this.y + 10, 15, 5);
+        }
+    }
+    for(let i=0; i<3; i++) clouds.push(new Cloud());
+
+    // Input
+    window.addEventListener('keydown', function(e) {
+        if (e.code === 'Space' || e.code === 'ArrowUp') {
+            e.preventDefault(); // Evitar scroll
+            if (!gameStarted) {
+                gameStarted = true;
+                isPlaying = true;
+                animate();
+            } else if (isGameOver) {
+                resetGame();
+            } else {
+                dino.jump();
+            }
+        }
+        if (e.code === 'ArrowDown') {
+            e.preventDefault();
+            if (isPlaying && dino.grounded) dino.isDucking = true;
+        }
+    });
+
+    window.addEventListener('keyup', function(e) {
+        if (e.code === 'ArrowDown') dino.isDucking = false;
+    });
+
+    canvas.addEventListener('touchstart', function(e) {
+        e.preventDefault();
+        if (!gameStarted) { gameStarted = true; isPlaying = true; animate(); }
+        else if (isGameOver) resetGame();
+        else dino.jump();
+    });
+
+    function spawnObstacle() {
+        if (frame < 60) return;
+        const interval = Math.max(80, 140 - Math.floor(gameSpeed * 6));
+        if (frame % interval !== 0) return;
+        if (obstacles.length === 0 || canvas.width - obstacles[obstacles.length-1].x > 220) {
+            obstacles.push(new Obstacle());
+        }
+    }
+
+    function checkCollision(r1, r2) {
+        // Hitbox un poco más pequeña para ser justos
+        return r1.x < r2.x + r2.width &&
+               r1.x + r1.width > r2.x &&
+               r1.y < r2.y + r2.height &&
+               r1.y + r1.height > r2.y;
+    }
+
+    function drawScore() {
+        ctx.fillStyle = COLOR;
+        ctx.font = 'bold 16px Courier New';
+        let scoreText = String(score).padStart(5, '0');
+        let hiText = 'HI ' + String(highScore).padStart(5, '0');
+        ctx.fillText(hiText + '   ' + scoreText, canvas.width - 180, 30);
+    }
+
+    function startScreen() {
+        ctx.fillStyle = COLOR;
+        ctx.font = '16px Courier New';
+        ctx.textAlign = 'center';
+        ctx.fillText('Presiona Espacio para empezar', canvas.width/2, canvas.height/2 - 50);
+        ctx.textAlign = 'left';
+        dino.drawStatic();
+        drawGround();
+        clouds.forEach(c => c.draw());
+    }
+
+    function gameOverScreen() {
+        ctx.fillStyle = COLOR;
+        ctx.font = 'bold 20px Courier New';
+        ctx.textAlign = 'center';
+        ctx.fillText('G A M E   O V E R', canvas.width/2, canvas.height/2 - 40);
+        
+        // Icono de reinicio (flecha circular simple)
+        ctx.beginPath();
+        ctx.arc(canvas.width/2, canvas.height/2 + 10, 10, 0, Math.PI * 1.5);
+        ctx.strokeStyle = COLOR;
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(canvas.width/2 + 10, canvas.height/2 + 10);
+        ctx.lineTo(canvas.width/2 + 15, canvas.height/2 + 5);
+        ctx.lineTo(canvas.width/2 + 5, canvas.height/2 + 5);
+        ctx.fill();
+
+        ctx.font = '14px Courier New';
+        ctx.fillText('Presiona Espacio para reiniciar', canvas.width/2, canvas.height/2 + 40);
+        ctx.textAlign = 'left';
+    }
+
+    function resetGame() {
+        isGameOver = false;
+        isPlaying = true;
+        score = 0;
+        gameSpeed = 6;
+        frame = 0;
+        obstacles.length = 0;
+        dino.y = groundY - dino.height;
+        dino.dy = 0;
+        dino.grounded = true;
+        dino.isDucking = false;
+        animate();
+    }
+
+    function animate() {
+        if (!isPlaying) return;
+
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        clouds.forEach(cloud => cloud.update());
+        drawGround();
+        dino.update();
+        
+        spawnObstacle();
+        
+        for (let i = 0; i < obstacles.length; i++) {
+            obstacles[i].update();
+            
+            // Hitbox ajustada
+            let dinoBox = { x: dino.x + 5, y: dino.y + 5, width: dino.width - 10, height: dino.height - 10 };
+            let obsBox = { x: obstacles[i].x + 2, y: obstacles[i].y + 2, width: obstacles[i].width - 4, height: obstacles[i].height - 4 };
+
+            if (checkCollision(dinoBox, obsBox)) {
+                isGameOver = true;
+                isPlaying = false;
+                if (score > highScore) {
+                    highScore = score;
+                    localStorage.setItem('dinoHighScore', highScore);
+                }
+                // Dibujar una última vez para mostrar el choque
+                dino.draw();
+                obstacles[i].draw();
+                drawScore();
+                gameOverScreen();
+                return;
+            }
+        }
+        
+        for(let i = obstacles.length - 1; i >= 0; i--) {
+            if(obstacles[i].markedForDeletion) obstacles.splice(i, 1);
+        }
+
+        if (frame % 5 === 0) score++;
+        if (score > 0 && score % 100 === 0 && frame % 5 === 0) {
+            gameSpeed = Math.min(15, gameSpeed + 0.2);
+        }
+
+        drawScore();
+        frame++;
+        requestAnimationFrame(animate);
+    }
+
+    // Iniciar pantalla de título
+    startScreen();
+
+</script>
+</body>
+</html>

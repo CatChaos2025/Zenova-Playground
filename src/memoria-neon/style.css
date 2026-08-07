@@ -1,0 +1,252 @@
+/* ===== Configuración general ===== */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    background: #0f0f18;
+    color: #ffffff;
+    font-family: 'Courier New', Courier, monospace;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    padding: 15px;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.game-wrapper {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 15px;
+    max-width: 500px;
+}
+
+.title {
+    color: #00e5ff;
+    text-shadow: 0 0 10px #00e5ff, 0 0 25px #0099cc;
+    letter-spacing: 4px;
+    font-size: 28px;
+}
+
+/* ===== Marcador ===== */
+.score-panel {
+    display: flex;
+    gap: 15px;
+}
+
+.score-box {
+    background: #14141f;
+    border: 2px solid #00e5ff;
+    border-radius: 8px;
+    padding: 6px 20px;
+    text-align: center;
+    box-shadow: 0 0 12px rgba(0, 229, 255, 0.3);
+}
+
+.score-box .label {
+    display: block;
+    font-size: 11px;
+    color: #888;
+    text-transform: uppercase;
+}
+
+.score-box span:not(.label) {
+    font-size: 20px;
+    font-weight: bold;
+    color: #00e5ff;
+}
+
+/* ===== Selector de dificultad ===== */
+.difficulty-selector {
+    display: flex;
+    gap: 10px;
+}
+
+.diff-btn {
+    background: #14141f;
+    color: #00e5ff;
+    border: 2px solid #00e5ff;
+    padding: 8px 20px;
+    border-radius: 20px;
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-family: inherit;
+}
+
+.diff-btn:hover {
+    background: rgba(0, 229, 255, 0.2);
+}
+
+.diff-btn.active {
+    background: #00e5ff;
+    color: #0f0f18;
+    font-weight: bold;
+}
+
+/* ===== Tablero ===== */
+.board {
+    display: grid;
+    gap: 10px;
+    padding: 15px;
+    background: #14141f;
+    border-radius: 12px;
+    border: 3px solid #00e5ff;
+    box-shadow: 0 0 30px rgba(0, 229, 255, 0.4);
+}
+
+.board.easy {
+    grid-template-columns: repeat(4, 70px);
+}
+
+.board.hard {
+    grid-template-columns: repeat(6, 60px);
+}
+
+/* ===== Cartas con volteo 3D ===== */
+.card {
+    width: 100%;
+    aspect-ratio: 1;
+    perspective: 1000px;
+    cursor: pointer;
+}
+
+.card-inner {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    transition: transform 0.5s;
+    transform-style: preserve-3d;
+}
+
+.card.flipped .card-inner {
+    transform: rotateY(180deg);
+}
+
+.card.matched .card-inner {
+    transform: rotateY(180deg);
+}
+
+.card.matched {
+    animation: matchPulse 0.5s;
+}
+
+@keyframes matchPulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.1); }
+}
+
+.card-front,
+.card-back {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    border-radius: 8px;
+    font-size: 28px;
+}
+
+.card-back {
+    background: linear-gradient(135deg, #1a1a2e, #16213e);
+    border: 2px solid #00e5ff;
+    color: #00e5ff;
+    font-size: 24px;
+}
+
+.card-front {
+    background: linear-gradient(135deg, #16213e, #0f3460);
+    border: 2px solid #ffd32a;
+    transform: rotateY(180deg);
+}
+
+.card.matched .card-front {
+    border-color: #2ed573;
+    box-shadow: 0 0 15px rgba(46, 213, 115, 0.6);
+}
+
+/* ===== Pantalla de victoria ===== */
+.overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(15, 15, 24, 0.95);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    gap: 15px;
+    z-index: 100;
+    padding: 20px;
+}
+
+.overlay h2 {
+    color: #ffd32a;
+    font-size: 36px;
+    letter-spacing: 3px;
+    text-shadow: 0 0 15px rgba(255, 211, 42, 0.8);
+}
+
+.overlay p {
+    color: #cccccc;
+    font-size: 16px;
+}
+
+.gold {
+    color: #ffd700 !important;
+    font-weight: bold;
+}
+
+.hidden {
+    display: none !important;
+}
+
+/* ===== Botones ===== */
+button {
+    cursor: pointer;
+    border: none;
+    font-family: inherit;
+}
+
+#restart-btn {
+    background: #00e5ff;
+    color: #0f0f18;
+    font-size: 18px;
+    font-weight: bold;
+    padding: 12px 40px;
+    border-radius: 50px;
+    transition: transform 0.1s, box-shadow 0.2s;
+    box-shadow: 0 0 15px rgba(0, 229, 255, 0.6);
+}
+
+#restart-btn:hover {
+    transform: scale(1.08);
+    box-shadow: 0 0 30px rgba(0, 229, 255, 0.9);
+}
+
+/* ===== Responsive ===== */
+@media (max-width: 430px) {
+    .board.easy {
+        grid-template-columns: repeat(4, 60px);
+    }
+    .board.hard {
+        grid-template-columns: repeat(6, 48px);
+    }
+    .card-front, .card-back {
+        font-size: 22px;
+    }
+    .title {
+        font-size: 22px;
+    }
+}

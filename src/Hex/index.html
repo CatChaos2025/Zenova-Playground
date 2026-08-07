@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hex - Corregido</title>
+<style>
+    :root {
+        --bg: #1a1a2e;
+        --panel: #16213e;
+        --red: #e63946;
+        --blue: #457b9d;
+        --cell-empty: #f1faee;
+        --highlight: #ffd60a;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+        font-family: system-ui, sans-serif;
+        background: var(--bg);
+        color: white;
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 20px 10px;
+        user-select: none;
+    }
+    h1 { margin-bottom: 10px; font-size: 1.8rem; letter-spacing: 2px; }
+    .subtitle { color: #aaa; font-size: 0.9rem; margin-bottom: 15px; }
+
+    .game-area {
+        display: flex;
+        gap: 25px;
+        flex-wrap: wrap;
+        justify-content: center;
+        align-items: flex-start;
+    }
+
+    .board-wrapper { position: relative; padding: 30px; }
+
+    .side-label {
+        position: absolute;
+        font-weight: bold;
+        font-size: 0.85rem;
+        letter-spacing: 1px;
+    }
+    .side-top    { top: 5px;  left: 50%; transform: translateX(-50%); color: var(--red); }
+    .side-bottom { bottom: 5px; left: 50%; transform: translateX(-50%); color: var(--red); }
+    .side-left   { left: 0; top: 50%; transform: translateY(-50%) rotate(-90deg); color: var(--blue); }
+    .side-right  { right: 0; top: 50%; transform: translateY(-50%) rotate(90deg); color: var(--blue); }
+
+    #board { display: grid; }
+
+    .hex-row {
+        display: flex;
+        margin-top: -14px;
+    }
+    .hex-row:first-child { margin-top: 0; }
+
+    .hex {
+        width: 46px;
+        height: 52px;
+        margin: 0 2px;
+        background: var(--cell-empty);
+        clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+        cursor: pointer;
+        transition: background 0.15s, transform 0.1s;
+        position: relative;
+    }
+    .hex:hover:not(.filled) { background: #ddd; transform: scale(1.05); }
+    .hex.red  { background: var(--red);  cursor: default; }
+    .hex.blue { background: var(--blue); cursor: default; }
+    .hex.filled { cursor: default; }
+    .hex.last-move::after {
+        content: ''; position: absolute;
+        top: 50%; left: 50%; transform: translate(-50%, -50%);
+        width: 10px; height: 10px; border-radius: 50%;
+        background: var(--highlight);
+    }
+    .hex.winning { filter: brightness(1.3); }
+
+    .panel {
+        background: var(--panel);
+        padding: 20px;
+        border-radius: 10px;
+        width: 230px;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+    }
+    .status-box { margin-bottom: 15px; }
+    .label { color: #aaa; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1px; }
+    .value { font-size: 1.1rem; font-weight: bold; margin-top: 4px; display: flex; align-items: center; gap: 8px; }
+    .dot { width: 14px; height: 14px; border-radius: 50%; display: inline-block; }
+    .dot.red  { background: var(--red); }
+    .dot.blue { background: var(--blue); }
+
+    select, button {
+        width: 100%; padding: 10px; margin-top: 8px;
+        border: none; border-radius: 6px; font-size: 0.95rem; cursor: pointer;
+    }
+    select { background: #ecf0f1; color: #2c3e50; }
+    button { background: var(--red); color: white; font-weight: bold; transition: 0.2s; }
+    button:hover { filter: brightness(1.15); }
+
+    .rules {
+        margin-top: 15px; padding-top: 15px; border-top: 1px solid #333;
+        font-size: 0.8rem; color: #bbb; line-height: 1.5;
+    }
+    .rules b { color: white; }
+
+    @media (max-width: 700px) {
+        .hex { width: 30px; height: 34px; }
+        .hex-row { margin-top: -9px; }
+        .panel { width: 90vw; max-width: 320px; }
+    }
+</style>
+</head>
+<body>
+
+<h1>⬡ HEX </h1>
+<div class="subtitle">Conecta tus dos lados opuestos para ganar</div>
+
+<div class="game-area">
+    <div class="board-wrapper">
+        <div class="side-label side-top">▲ ROJO ▲</div>
+        <div class="side-label side-bottom">▼ ROJO ▼</div>
+        <div class="side-label side-left">◀ AZUL</div>
+        <div class="side-label side-right">AZUL ▶</div>
+        <div id="board"></div>
+    </div>
+
+    <div class="panel">
+        <div class="status-box">
+            <div class="label">Estado</div>
+            <div id="status" class="value"><span class="dot red"></span> Tu turno (Rojo)</div>
+        </div>
+        <div class="status-box">
+            <div class="label">Dificultad IA</div>
+            <select id="difficulty">
+                <option value="easy">Fácil</option>
+                <option value="medium" selected>Normal</option>
+                <option value="hard">Difícil</option>
+            </select>
+        </div>
+        <button id="resetBtn">Nueva Partida</button>
+
+        <div class="rules">
+            <b>🔴 Rojo:</b> conecta arriba ↔ abajo<br>
+            <b>🔵 Azul (IA):</b> conecta izquierda ↔ derecha<br>
+            Haz clic en una casilla para colocar tu ficha.
+        </div>
+    </div>
+</div>
+
+<script>
+const SIZE = 11;
+const EMPTY = 0, RED = 1, BLUE = 2;
+
+let board = [];
+let currentPlayer = RED;
+let gameActive = true;
+let isAiThinking = false;
+let lastMove = null;
+
+const boardEl = document.getElementById('board');
+const statusEl = document.getElementById('status');
+const resetBtn = document.getElementById('resetBtn');
+const difficultyEl = document.getElementById('difficulty');
+
+function buildBoard() {
+    boardEl.innerHTML = '';
+    for (let r = 0; r < SIZE; r++) {
+        const rowEl = document.createElement('div');
+        rowEl.className = 'hex-row';
+        rowEl.style.marginLeft = (r * 25) + 'px';
+        for (let c = 0; c < SIZE; c++) {
+            const hex = document.createElement('div');
+            hex.className = 'hex';
+            hex.dataset.r = r;
+            hex.dataset.c = c;
+            hex.addEventListener('click', () => onCellClick(r, c));
+            rowEl.appendChild(hex);
+        }
+        boardEl.appendChild(rowEl);
+    }
+}
+
+function getHexEl(r, c) {
+    return boardEl.children[r].children[c];
+}
+
+function initGame() {
+    board = Array.from({length: SIZE}, () => Array(SIZE).fill(EMPTY));
+    currentPlayer = RED;
+    gameActive = true;
+    isAiThinking = false;
+    lastMove = null;
+    buildBoard();
+    updateStatus();
+}
+
+function onCellClick(r, c) {
+    if (!gameActive || isAiThinking || board[r][c] !== EMPTY) return;
+    
+    placeStone(r, c, RED);
+    
+    if (checkWin(RED)) {
+        endGame('🎉 ¡Ganaste! (Rojo conecta arriba-abajo)');
+        return;
+    }
+    
+    isAiThinking = true;
+    updateStatus();
+    setTimeout(aiMove, 300);
+}
+
+function placeStone(r, c, player) {
+    board[r][c] = player;
+    if (lastMove) getHexEl(lastMove.r, lastMove.c).classList.remove('last-move');
+    const el = getHexEl(r, c);
+    el.classList.add(player === RED ? 'red' : 'blue', 'filled', 'last-move');
+    lastMove = {r, c};
+}
+
+function checkWin(player) {
+    const visited = Array.from({length: SIZE}, () => Array(SIZE).fill(false));
+    const stack = [];
+    
+    if (player === RED) {
+        for (let c = 0; c < SIZE; c++) {
+            if (board[0][c] === RED) {
+                stack.push([0, c]);
+                visited[0][c] = true;
+            }
+        }
+    } else {
+        for (let r = 0; r < SIZE; r++) {
+            if (board[r][0] === BLUE) {
+                stack.push([r, 0]);
+                visited[r][0] = true;
+            }
+        }
+    }
+    
+    const neighbors = (r, c) => [
+        [r-1, c], [r-1, c+1],
+        [r, c-1], [r, c+1],
+        [r+1, c-1], [r+1, c]
+    ];
+    
+    while (stack.length > 0) {
+        const [r, c] = stack.pop();
+        
+        if (player === RED && r === SIZE - 1) return true;
+        if (player === BLUE && c === SIZE - 1) return true;
+        
+        for (const [nr, nc] of neighbors(r, c)) {
+            if (nr >= 0 && nr < SIZE && nc >= 0 && nc < SIZE &&
+                !visited[nr][nc] && board[nr][nc] === player) {
+                visited[nr][nc] = true;
+                stack.push([nr, nc]);
+            }
+        }
+    }
+    return false;
+}
+
+function endGame(msg) {
+    gameActive = false;
+    isAiThinking = false;
+    statusEl.innerHTML = msg;
+}
+
+function updateStatus() {
+    if (!gameActive) return;
+    if (isAiThinking) {
+        statusEl.innerHTML = '<span class="dot blue"></span> 🤔 IA pensando...';
+    } else {
+        statusEl.innerHTML = currentPlayer === RED
+            ? '<span class="dot red"></span> Tu turno (Rojo)'
+            : '<span class="dot blue"></span> Turno IA (Azul)';
+    }
+}
+
+/* ====== IA CORREGIDA Y SIMPLIFICADA ====== */
+function aiMove() {
+    if (!gameActive) return;
+    
+    const move = getBestMoveSimple();
+    if (move) {
+        placeStone(move.r, move.c, BLUE);
+        
+        if (checkWin(BLUE)) {
+            endGame('💀 La IA ganó (Azul conecta izq-der)');
+            return;
+        }
+    }
+    
+    currentPlayer = RED;
+    isAiThinking = false;
+    updateStatus();
+}
+
+function getBestMoveSimple() {
+    const emptyCells = [];
+    for (let r = 0; r < SIZE; r++) {
+        for (let c = 0; c < SIZE; c++) {
+            if (board[r][c] === EMPTY) {
+                emptyCells.push({r, c});
+            }
+        }
+    }
+    
+    if (emptyCells.length === 0) return null;
+    
+    // Primer movimiento: centro
+    if (emptyCells.length === SIZE * SIZE) {
+        const mid = Math.floor(SIZE / 2);
+        return {r: mid, c: mid};
+    }
+    
+    const difficulty = difficultyEl.value;
+    let bestMove = null;
+    let bestScore = -Infinity;
+    
+    for (const cell of emptyCells) {
+        const score = evaluateMove(cell.r, cell.c, difficulty);
+        if (score > bestScore) {
+            bestScore = score;
+            bestMove = cell;
+        }
+    }
+    
+    return bestMove;
+}
+
+function evaluateMove(r, c, difficulty) {
+    let score = 0;
+    
+    // 1. Progreso hacia conectar izquierda-derecha (objetivo de AZUL)
+    score += calculateProgress(r, c, BLUE) * 10;
+    
+    // 2. Bloquear al rojo (evitar que conecte arriba-abajo)
+    score += calculateBlockValue(r, c, RED) * 8;
+    
+    // 3. Centralidad (casillas centrales son estratégicas)
+    const center = (SIZE - 1) / 2;
+    const distToCenter = Math.abs(r - center) + Math.abs(c - center);
+    score += (SIZE - distToCenter) * 2;
+    
+    // 4. Aleatoriedad según dificultad
+    const noise = difficulty === 'easy' ? 15 : difficulty === 'medium' ? 5 : 1;
+    score += Math.random() * noise;
+    
+    return score;
+}
+
+function calculateProgress(r, c, player) {
+    // Simular colocar la ficha y medir progreso
+    const oldVal = board[r][c];
+    board[r][c] = player;
+    
+    let progress = 0;
+    
+    if (player === BLUE) {
+        // Medir qué tan cerca estamos de conectar izquierda-derecha
+        const leftDist = bfsDistanceToEdge(r, c, 'left', BLUE);
+        const rightDist = bfsDistanceToEdge(r, c, 'right', BLUE);
+        progress = (SIZE * 2) - (leftDist + rightDist);
+    } else {
+        // Para rojo: arriba-abajo
+        const topDist = bfsDistanceToEdge(r, c, 'top', RED);
+        const bottomDist = bfsDistanceToEdge(r, c, 'bottom', RED);
+        progress = (SIZE * 2) - (topDist + bottomDist);
+    }
+    
+    board[r][c] = oldVal; // Restaurar
+    return progress;
+}
+
+function bfsDistanceToEdge(startR, startC, edge, player) {
+    const visited = Array.from({length: SIZE}, () => Array(SIZE).fill(false));
+    const queue = [[startR, startC, 0]];
+    visited[startR][startC] = true;
+    
+    const neighbors = (r, c) => [
+        [r-1, c], [r-1, c+1],
+        [r, c-1], [r, c+1],
+        [r+1, c-1], [r+1, c]
+    ];
+    
+    while (queue.length > 0) {
+        const [r, c, dist] = queue.shift();
+        
+        // ¿Llegamos al borde objetivo?
+        if (edge === 'left' && c === 0) return dist;
+        if (edge === 'right' && c === SIZE - 1) return dist;
+        if (edge === 'top' && r === 0) return dist;
+        if (edge === 'bottom' && r === SIZE - 1) return dist;
+        
+        for (const [nr, nc] of neighbors(r, c)) {
+            if (nr >= 0 && nr < SIZE && nc >= 0 && nc < SIZE &&
+                !visited[nr][nc] && (board[nr][nc] === player || board[nr][nc] === EMPTY)) {
+                visited[nr][nc] = true;
+                queue.push([nr, nc, dist + 1]);
+            }
+        }
+    }
+    
+    return SIZE * 2; // No se puede llegar
+}
+
+function calculateBlockValue(r, c, opponent) {
+    // Medir qué tan peligroso es esta casilla para el oponente
+    const oldVal = board[r][c];
+    board[r][c] = opponent;
+    
+    let threat = 0;
+    
+    if (opponent === RED) {
+        const topDist = bfsDistanceToEdge(r, c, 'top', RED);
+        const bottomDist = bfsDistanceToEdge(r, c, 'bottom', RED);
+        threat = (SIZE * 2) - (topDist + bottomDist);
+    } else {
+        const leftDist = bfsDistanceToEdge(r, c, 'left', BLUE);
+        const rightDist = bfsDistanceToEdge(r, c, 'right', BLUE);
+        threat = (SIZE * 2) - (leftDist + rightDist);
+    }
+    
+    board[r][c] = oldVal;
+    return threat;
+}
+
+resetBtn.addEventListener('click', initGame);
+initGame();
+</script>
+</body>
+</html>

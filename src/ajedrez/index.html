@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ajedrez vs IA - Funcional</title>
+    <link rel="stylesheet" href="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.css">
+    <style>
+        :root { --bg: #2c3e50; --panel: #34495e; --accent: #27ae60; }
+        body {
+            font-family: system-ui, sans-serif; background: var(--bg); color: white;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            min-height: 100vh; margin: 0; user-select: none;
+        }
+        h1 { margin: 10px 0; font-size: 1.5rem; }
+        .game-wrapper { display: flex; gap: 20px; flex-wrap: wrap; justify-content: center; align-items: flex-start; }
+
+        /* ====== ESTILOS CRÍTICOS DEL TABLERO ====== */
+        #myBoard { width: 400px; aspect-ratio: 1 / 1; }
+        .board-b72b1 { position: relative; width: 100%; height: 100%; }
+        .square-55d63 {
+            float: left; position: relative;
+            width: 12.5%; height: 12.5%;
+            cursor: pointer;
+        }
+        .clearfix-7da63::after { content: ""; display: table; clear: both; }
+        .white-1e1d7 { background-color: #f0d9b5; }
+        .black-3c85f { background-color: #b58863; }
+
+        /* ====== FEEDBACK DE CLIC ====== */
+        .highlight-selected { box-shadow: inset 0 0 0 3px #f1c40f !important; background: rgba(241,196,15,0.4) !important; }
+        .hint-move::after {
+            content:''; position:absolute; width:30%; height:30%;
+            background:rgba(0,0,0,0.25); border-radius:50%;
+            top:50%; left:50%; transform:translate(-50%,-50%); pointer-events:none;
+        }
+        .hint-capture { box-shadow: inset 0 0 0 3px rgba(231,76,60,0.7) !important; }
+
+        .panel { background:var(--panel); padding:15px; border-radius:8px; width:220px; }
+        .status { font-weight:bold; margin-bottom:10px; min-height:1.5em; }
+        select, button { width:100%; padding:8px; margin-top:8px; border:none; border-radius:4px; font-size:0.9rem; cursor:pointer; }
+        button { background:var(--accent); color:white; font-weight:bold; }
+        button:hover { filter:brightness(1.1); }
+        #loading { color:#f39c12; font-weight:bold; margin:20px; }
+        #error-msg { color:#e74c3c; display:none; text-align:center; max-width:400px; margin:20px; background:rgba(0,0,0,0.3); padding:15px; border-radius:8px; }
+
+        @media(max-width:700px) {
+            #myBoard { width: min(90vw, 400px); }
+            .panel { width: min(90vw, 400px); }
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Ajedrez vs IA (Clic)</h1>
+    <div id="loading">⏳ Cargando...</div>
+    <div id="error-msg"></div>
+
+    <div class="game-wrapper" id="game-ui" style="display:none;">
+        <div id="myBoard"></div>
+        <div class="panel">
+            <div style="color:#bdc3c7; font-size:0.8rem; text-transform:uppercase;">Estado</div>
+            <div id="status" class="status">Tu turno (Blancas)</div>
+            <div style="color:#bdc3c7; font-size:0.8rem; text-transform:uppercase; margin-top:10px;">Dificultad</div>
+            <select id="difficulty">
+                <option value="1">Fácil</option>
+                <option value="2" selected>Normal</option>
+                <option value="3">Difícil</option>
+            </select>
+            <button onclick="resetGame()">Nueva Partida</button>
+        </div>
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
+    <script src="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.js"></script>
+
+<script>
+window.onload = function() {
+    let attempts = 0;
+    const check = setInterval(() => {
+        attempts++;
+        if (typeof Chess !== 'undefined' && typeof Chessboard !== 'undefined' && typeof $ !== 'undefined') {
+            clearInterval(check);
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('game-ui').style.display = 'flex';
+            initGame();
+        } else if (attempts > 50) {
+            clearInterval(check);
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('error-msg').style.display = 'block';
+            document.getElementById('error-msg').innerHTML = '<strong>❌ Error al cargar librerías.</strong><br>Verifica tu conexión o desactiva adblockers.';
+        }
+    }, 100);
+};
+
+let board, game;
+let isAiThinking = false;
+let selectedSquare = null;
+
+const PIECE_VALUES = { p:100, n:320, b:330, r:500, q:900, k:20000 };
+const PST = {
+    p:[[0,0,0,0,0,0,0,0],[50,50,50,50,50,50,50,50],[10,10,20,30,30,20,10,10],[5,5,10,25,25,10,5,5],[0,0,0,20,20,0,0,0],[5,-5,-10,0,0,-10,-5,5],[5,10,10,-20,-20,10,10,5],[0,0,0,0,0,0,0,0]],
+    n:[[-50,-40,-30,-30,-30,-30,-40,-50],[-40,-20,0,0,0,0,-20,-40],[-30,0,10,15,15,10,0,-30],[-30,5,15,20,20,15,5,-30],[-30,0,15,20,20,15,0,-30],[-30,5,10,15,15,10,5,-30],[-40,-20,0,5,5,0,-20,-40],[-50,-40,-30,-30,-30,-30,-40,-50]],
+    b:[[-20,-10,-10,-10,-10,-10,-10,-20],[-10,0,0,0,0,0,0,-10],[-10,0,5,10,10,5,0,-10],[-10,5,5,10,10,5,5,-10],[-10,0,10,10,10,10,0,-10],[-10,10,10,10,10,10,10,-10],[-10,5,0,0,0,0,5,-10],[-20,-10,-10,-10,-10,-10,-10,-20]],
+    r:[[0,0,0,0,0,0,0,0],[5,10,10,10,10,10,10,5],[-5,0,0,0,0,0,0,-5],[-5,0,0,0,0,0,0,-5],[-5,0,0,0,0,0,0,-5],[-5,0,0,0,0,0,0,-5],[-5,0,0,0,0,0,0,-5],[0,0,0,5,5,0,0,0]],
+    q:[[-20,-10,-10,-5,-5,-10,-10,-20],[-10,0,0,0,0,0,0,-10],[-10,0,5,5,5,5,0,-10],[-5,0,5,5,5,5,0,-5],[0,0,5,5,5,5,0,-5],[-10,5,5,5,5,5,0,-10],[-10,0,5,0,0,0,0,-10],[-20,-10,-10,-5,-5,-10,-10,-20]],
+    k:[[-30,-40,-40,-50,-50,-40,-40,-30],[-30,-40,-40,-50,-50,-40,-40,-30],[-30,-40,-40,-50,-50,-40,-40,-30],[-30,-40,-40,-50,-50,-40,-40,-30],[-20,-30,-30,-40,-40,-30,-30,-20],[-10,-20,-20,-20,-20,-20,-20,-10],[20,20,0,0,0,0,20,20],[20,30,10,0,0,10,30,20]]
+};
+
+function evaluate(fen) {
+    const g = new Chess(fen);
+    let s = 0;
+    g.board().forEach((row,r) => row.forEach((p,c) => {
+        if(!p) return;
+        const v = PIECE_VALUES[p.type] + PST[p.type][p.color==='w'?r:7-r][c];
+        s += (p.color==='w'?1:-1)*v;
+    }));
+    return s;
+}
+
+function minimax(g, depth, alpha, beta, maximizing) {
+    if(depth===0 || g.game_over()) return evaluate(g.fen());
+    const moves = g.moves({verbose:true});
+    moves.sort((a,b)=>(b.captured?PIECE_VALUES[b.captured]:0)-(a.captured?PIECE_VALUES[a.captured]:0));
+    if(maximizing) {
+        let best=-Infinity;
+        for(const m of moves){g.move(m);best=Math.max(best,minimax(g,depth-1,alpha,beta,false));g.undo();alpha=Math.max(alpha,best);if(beta<=alpha)break;}
+        return best;
+    } else {
+        let best=Infinity;
+        for(const m of moves){g.move(m);best=Math.min(best,minimax(g,depth-1,alpha,beta,true));g.undo();beta=Math.min(beta,best);if(beta<=alpha)break;}
+        return best;
+    }
+}
+
+function getBestMove() {
+    const depth = parseInt(document.getElementById('difficulty').value);
+    const moves = game.moves({verbose:true});
+    if(!moves.length) return null;
+    let best=null, bestVal=Infinity, a=-Infinity, b=Infinity;
+    moves.sort((x,y)=>(y.captured?PIECE_VALUES[y.captured]:0)-(x.captured?PIECE_VALUES[x.captured]:0));
+    for(const m of moves){
+        game.move(m);
+        const val=minimax(game,depth-1,a,b,true);
+        game.undo();
+        if(val<bestVal){bestVal=val;best=m;}
+        b=Math.min(b,bestVal);
+    }
+    return best||moves[Math.floor(Math.random()*moves.length)];
+}
+
+/* ====== INTERACCIÓN POR CLIC ====== */
+function clearHL() {
+    $('.square-55d63').removeClass('highlight-selected hint-move hint-capture');
+}
+
+function showMoves(sq) {
+    game.moves({square:sq, verbose:true}).forEach(m=>{
+        const $t = $('.square-' + m.to);
+        if (m.captured) $t.addClass('hint-capture');
+        else $t.addClass('hint-move');
+    });
+}
+
+function onSquareClick(square) {
+    if (isAiThinking || game.game_over()) return;
+
+    const piece = game.get(square);
+    const isOwn = piece && piece.color === 'w';
+
+    // Clic en pieza propia → seleccionar (o deseleccionar si ya estaba seleccionada)
+    if (isOwn) {
+        if (selectedSquare === square) { clearHL(); selectedSquare = null; return; }
+        clearHL();
+        selectedSquare = square;
+        $('.square-' + square).addClass('highlight-selected');
+        showMoves(square);
+        return;
+    }
+
+    // Clic en destino → intentar mover
+    if (selectedSquare) {
+        const move = game.move({ from: selectedSquare, to: square, promotion: 'q' });
+        if (move) {
+            clearHL();
+            selectedSquare = null;
+            board.position(game.fen());
+            updateStatus();
+            if (!game.game_over()) {
+                isAiThinking = true;
+                document.getElementById('status').innerText = "🤔 IA pensando...";
+                setTimeout(() => {
+                    const aiMove = getBestMove();
+                    if (aiMove) { game.move(aiMove); board.position(game.fen()); }
+                    isAiThinking = false;
+                    updateStatus();
+                }, 200);
+            }
+        } else {
+            clearHL();
+            selectedSquare = null;
+        }
+    }
+}
+
+function updateStatus() {
+    const el = document.getElementById('status');
+    if (game.in_checkmate()) el.innerText = game.turn()==='w' ? "💀 Jaque Mate - IA gana" : "🎉 ¡Jaque Mate - Ganaste!";
+    else if (game.in_draw() || game.in_stalemate()) el.innerText = "🤝 Tablas";
+    else {
+        el.innerText = game.turn()==='w' ? "♟ Tu turno (Blancas)" : "🤖 Turno IA (Negras)";
+        if (game.in_check()) el.innerText += " ⚠️ ¡JAQUE!";
+    }
+}
+
+function resetGame() {
+    board.start();
+    game.reset();
+    isAiThinking = false;
+    selectedSquare = null;
+    clearHL();
+    updateStatus();
+}
+
+function initGame() {
+    game = new Chess();
+    board = Chessboard('myBoard', {
+        draggable: false,
+        position: 'start',
+        pieceTheme: 'https://chessboardjs.com/img/chesspieces/wikipedia/{piece}.png'
+    });
+
+    // ✅ LA CORRECCIÓN CLAVE: vincular clics directamente con jQuery
+    // (onSquareClick no existe en chessboard.js 1.0.0, por eso no funcionaba)
+    $('#myBoard').on('click', '.square-55d63', function() {
+        onSquareClick($(this).attr('data-square'));
+    });
+
+    updateStatus();
+    window.addEventListener('resize', () => board.resize());
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,52 @@
+*{margin:0;padding:0;box-sizing:border-box;user-select:none}
+body{background:linear-gradient(135deg,#1a1a2e,#16213e);display:flex;justify-content:center;align-items:center;min-height:100vh;font-family:Arial,sans-serif;color:#fff;overflow:hidden;padding:10px}
+.game{width:700px;max-width:95vw;text-align:center}
+h1{font-size:2.2em;color:#ffd700;text-shadow:0 0 20px #ffd700;margin-bottom:10px}
+.arena{position:relative;width:100%;height:300px;background:linear-gradient(to bottom,#2c3e50,#34495e);border:3px solid #ffd700;border-radius:15px;overflow:hidden;margin-bottom:15px}
+.floor{position:absolute;bottom:0;width:100%;height:60px;background:linear-gradient(to bottom,#8B7355,#6B5B3A);border-top:3px solid #ffd700}
+.fencer{position:absolute;bottom:60px;width:60px;height:100px;transition:all 0.3s}
+.fencer.jugador{left:100px}
+.fencer.rival{right:100px;transform:scaleX(-1)}
+.body-part{position:absolute}
+.head{width:20px;height:20px;background:#ffcc80;border-radius:50%;top:0;left:20px;border:2px solid #333}
+.torso{width:24px;height:35px;background:#fff;top:18px;left:18px;border-radius:3px;border:2px solid #333}
+.legs{width:24px;height:30px;background:#333;top:50px;left:18px;border-radius:0 0 3px 3px}
+.sword{width:50px;height:3px;background:linear-gradient(to right,#ccc,#fff);top:30px;left:45px;transform-origin:left center;transition:transform 0.15s;border-radius:2px;box-shadow:0 0 5px #fff}
+.guard{width:8px;height:12px;background:#ffd700;top:25px;left:42px;border-radius:2px}
+.fencer.ataque-alto .sword{transform:rotate(-45deg)}
+.fencer.ataque-bajo .sword{transform:rotate(20deg)}
+.fencer.defensa .sword{transform:rotate(-80deg)}
+.fencer.estocada{animation:estocada 0.3s ease-out}
+.fencer.jugador.estocada{left:180px}
+.fencer.rival.estocada{right:180px}
+@keyframes estocada{0%{transform:translateX(0)}50%{transform:translateX(40px)}100%{transform:translateX(0)}}
+.fencer.rival.estocada{animation:estocadaR 0.3s ease-out}
+@keyframes estocadaR{0%{transform:scaleX(-1) translateX(0)}50%{transform:scaleX(-1) translateX(40px)}100%{transform:scaleX(-1) translateX(0)}}
+.hit-effect{position:absolute;font-size:2em;animation:hitAnim 0.8s ease-out forwards;pointer-events:none}
+@keyframes hitAnim{0%{opacity:1;transform:translateY(0) scale(1)}100%{opacity:0;transform:translateY(-60px) scale(1.5)}}
+.vidas{display:flex;justify-content:space-between;margin-bottom:10px;gap:10px}
+.vida-box{flex:1;background:rgba(0,0,0,0.5);border-radius:10px;padding:10px;border:2px solid}
+.vida-box.j{border-color:#4CAF50}
+.vida-box.r{border-color:#F44336}
+.vida-bar{width:100%;height:20px;background:#333;border-radius:10px;overflow:hidden;margin-top:5px}
+.vida-fill{height:100%;border-radius:10px;transition:width 0.5s}
+.vida-fill.j{background:linear-gradient(90deg,#4CAF50,#8BC34A)}
+.vida-fill.r{background:linear-gradient(90deg,#F44336,#FF5722)}
+.acciones{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-bottom:10px}
+.btn-accion{padding:15px 20px;font-size:1.1em;font-weight:bold;border:3px solid;border-radius:12px;cursor:pointer;transition:all 0.2s;min-width:130px}
+.btn-accion:hover{transform:scale(1.05)}
+.btn-accion:active{transform:scale(0.95)}
+.btn-ataque-alto{background:#F44336;border-color:#ff6659;color:#fff}
+.btn-ataque-bajo{background:#FF9800;border-color:#ffb74d;color:#fff}
+.btn-defensa{background:#2196F3;border-color:#64b5f6;color:#fff}
+.btn-estocada{background:#9C27B0;border-color:#ce93d8;color:#fff}
+.btn-estocada:disabled{background:#555;border-color:#777;cursor:not-allowed}
+.info{background:rgba(0,0,0,0.5);padding:10px;border-radius:10px;font-size:0.95em;min-height:50px;display:flex;align-items:center;justify-content:center}
+.ronda{color:#ffd700;font-weight:bold;margin-bottom:5px}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;border-radius:15px}
+.overlay h2{font-size:2.5em;margin-bottom:15px}
+.overlay button{padding:15px 40px;font-size:1.3em;background:#ffd700;color:#333;border:none;border-radius:10px;cursor:pointer;font-weight:bold}
+.overlay button:hover{background:#ffed4e}
+.ki-bar{width:100%;height:8px;background:#333;border-radius:4px;margin-top:5px}
+.ki-fill{height:100%;background:linear-gradient(90deg,#9C27B0,#E040FB);border-radius:4px;transition:width 0.3s}
+.oculto{display:none !important}

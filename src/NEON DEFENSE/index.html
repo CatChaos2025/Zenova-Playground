@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Neon Defense</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="game-container">
+        <div class="hud">
+            <span class="money">💰 <b id="moneyVal">100</b></span>
+            <span class="wave">OLEADA: <b id="waveVal">1</b></span>
+            <span class="lives">❤️ <b id="livesVal">20</b></span>
+        </div>
+        
+        <canvas id="gameCanvas" width="800" height="600"></canvas>
+        
+        <div class="tower-selector">
+            <div class="tower-btn selected" data-type="basic">
+                <div class="tower-icon">🔫</div>
+                <div class="tower-name">Básica</div>
+                <div class="tower-cost">50💰</div>
+            </div>
+            <div class="tower-btn" data-type="sniper">
+                <div class="tower-icon">🎯</div>
+                <div class="tower-name">Sniper</div>
+                <div class="tower-cost">100💰</div>
+            </div>
+            <div class="tower-btn" data-type="rapid">
+                <div class="tower-icon">⚡</div>
+                <div class="tower-name">Rápida</div>
+                <div class="tower-cost">150💰</div>
+            </div>
+            <div class="tower-btn" data-type="aoe">
+                <div class="tower-icon">💥</div>
+                <div class="tower-name">Área</div>
+                <div class="tower-cost">200</div>
+            </div>
+        </div>
+        
+        <div class="ui-overlay" id="startScreen">
+            <h1>NEON DEFENSE</h1>
+            <p>Defiende tu base de las oleadas enemigas<br>Coloca torres estratégicamente</p>
+            <button id="startBtn">INICIAR DEFENSA</button>
+        </div>
+        
+        <div class="ui-overlay hidden" id="gameOverScreen">
+            <h1 class="game-over-title">BASE DESTRUIDA</h1>
+            <p>Oleadas sobrevividas: <b id="finalWave">0</b></p>
+            <button id="restartBtn">REINTENTAR</button>
+        </div>
+    </div>
+    
+    <script src="script.js"></script>
+</body>
+</html>

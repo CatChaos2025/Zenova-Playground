@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Santorini vs IA</title>
+    <style>
+        :root {
+            --bg-color: #2c3e50;
+            --board-bg: #ecf0f1;
+            --p1-color: #3498db; /* Humano (Azul) */
+            --p2-color: #e74c3c; /* IA (Rojo) */
+            --level-0: #bdc3c7;
+            --level-1: #dcdde1;
+            --level-2: #f5f6fa;
+            --level-3: #ffffff;
+            --highlight-move: rgba(46, 204, 113, 0.6);
+            --highlight-build: rgba(241, 196, 15, 0.6);
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: white;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            user-select: none;
+        }
+
+        h1 { margin: 10px 0; font-weight: 300; letter-spacing: 2px; }
+
+        #game-info {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 15px;
+            font-size: 1.2rem;
+        }
+
+        .player-badge {
+            padding: 5px 15px;
+            border-radius: 20px;
+            opacity: 0.5;
+            transition: all 0.3s;
+        }
+
+        .player-badge.active {
+            opacity: 1;
+            transform: scale(1.1);
+            box-shadow: 0 0 10px rgba(255,255,255,0.3);
+            font-weight: bold;
+        }
+
+        #status-msg {
+            height: 30px;
+            margin-bottom: 10px;
+            color: #f1c40f;
+            font-weight: bold;
+        }
+
+        /* Tablero */
+        #board {
+            display: grid;
+            grid-template-columns: repeat(5, 80px);
+            grid-template-rows: repeat(5, 80px);
+            gap: 4px;
+            background-color: #7f8c8d;
+            padding: 4px;
+            border-radius: 8px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+
+        .cell {
+            width: 80px;
+            height: 80px;
+            position: relative;
+            cursor: pointer;
+            perspective: 600px;
+        }
+
+        /* Niveles del edificio */
+        .building-layer {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            transition: all 0.3s ease;
+            border: 1px solid rgba(0,0,0,0.1);
+            box-sizing: border-box;
+        }
+
+        .layer-0 { height: 10%; background: var(--level-0); z-index: 1; }
+        .layer-1 { height: 35%; background: var(--level-1); z-index: 2; width: 80%; left: 10%; }
+        .layer-2 { height: 60%; background: var(--level-2); z-index: 3; width: 60%; left: 20%; }
+        .layer-3 { 
+            height: 80%; 
+            background: var(--level-3); 
+            z-index: 4; 
+            width: 40%; 
+            left: 30%; 
+            border-top: 4px solid #34495e; 
+        }
+
+        /* Trabajadores */
+        .worker {
+            position: absolute;
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 10;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.4);
+            border: 2px solid white;
+            transition: all 0.2s;
+        }
+
+        .worker.p1 { background-color: var(--p1-color); }
+        .worker.p2 { background-color: var(--p2-color); }
+        .worker.selected { border: 3px solid #f1c40f; transform: translate(-50%, -50%) scale(1.2); }
+
+        /* Resaltados */
+        .highlight-move::after {
+            content: ''; position: absolute; inset: 0;
+            background: var(--highlight-move); z-index: 5;
+            animation: pulse 1s infinite; pointer-events: none;
+        }
+        .highlight-build::after {
+            content: ''; position: absolute; inset: 0;
+            background: var(--highlight-build); z-index: 5;
+            animation: pulse 1s infinite; pointer-events: none;
+        }
+
+        @keyframes pulse { 0% { opacity: 0.4; } 50% { opacity: 0.8; } 100% { opacity: 0.4; } }
+
+        button {
+            margin-top: 20px; padding: 10px 20px;
+            background: #e67e22; border: none; color: white;
+            font-size: 1rem; cursor: pointer; border-radius: 5px;
+        }
+        button:hover { background: #d35400; }
+        
+        .thinking { color: #aaa; font-style: italic; }
+
+    </style>
+</head>
+<body>
+
+    <h1>SANTORINI <span style="font-size:0.5em; vertical-align: super;">vs IA</span></h1>
+
+    <div id="game-info">
+        <div id="p1-badge" class="player-badge active" style="background: var(--p1-color);">Tú (Azul)</div>
+        <div id="p2-badge" class="player-badge" style="background: var(--p2-color);">IA (Rojo)</div>
+    </div>
+
+    <div id="status-msg">Tu turno: Selecciona un trabajador</div>
+
+    <div id="board"></div>
+
+    <button onclick="resetGame()">Reiniciar Juego</button>
+
+<script>
+    // --- Configuración ---
+    const BOARD_SIZE = 5;
+    const MAX_LEVEL = 3; 
+    
+    // Estado
+    let board = []; 
+    let players = { p1: { workers: [] }, p2: { workers: [] } }; // p1=Humano, p2=IA
+    let currentPlayer = 'p1';
+    let phase = 'SELECT_WORKER'; 
+    let selectedWorkerIndex = null;
+    let winner = null;
+    let isAiThinking = false;
+
+    // DOM
+    const boardEl = document.getElementById('board');
+    const statusEl = document.getElementById('status-msg');
+    const p1Badge = document.getElementById('p1-badge');
+    const p2Badge = document.getElementById('p2-badge');
+
+    // --- Inicialización ---
+    function initGame() {
+        board = Array(BOARD_SIZE).fill().map(() => Array(BOARD_SIZE).fill(0));
+        // Posiciones simétricas para empezar
+        players.p1.workers = [{r: 3, c: 1}, {r: 3, c: 3}];
+        players.p2.workers = [{r: 1, c: 1}, {r: 1, c: 3}];
+
+        currentPlayer = 'p1';
+        phase = 'SELECT_WORKER';
+        selectedWorkerIndex = null;
+        winner = null;
+        isAiThinking = false;
+
+        updateUI();
+        renderBoard();
+    }
+
+    // --- Lógica del Juego ---
+
+    function handleCellClick(r, c) {
+        if (winner || isAiThinking || currentPlayer !== 'p1') return;
+
+        const currentWorkers = players[currentPlayer].workers;
+
+        if (phase === 'SELECT_WORKER') {
+            const workerIdx = currentWorkers.findIndex(w => w.r === r && w.c === c);
+            if (workerIdx !== -1 && hasValidMoves(r, c)) {
+                selectedWorkerIndex = workerIdx;
+                phase = 'MOVE';
+                statusEl.textContent = "Mueve a una casilla verde";
+                renderBoard();
+            } else if (workerIdx !== -1) {
+                statusEl.textContent = "Trabajador bloqueado, elige otro";
+            }
+        } 
+        else if (phase === 'MOVE') {
+            const worker = currentWorkers[selectedWorkerIndex];
+            if (isValidMove(worker.r, worker.c, r, c)) {
+                executeMove(selectedWorkerIndex, r, c);
+            } else {
+                // Permitir cambiar de selección
+                const otherIdx = currentWorkers.findIndex(w => w.r === r && w.c === c);
+                if (otherIdx !== -1 && hasValidMoves(r, c)) {
+                    selectedWorkerIndex = otherIdx;
+                    renderBoard();
+                }
+            }
+        }
+        else if (phase === 'BUILD') {
+            const worker = currentWorkers[selectedWorkerIndex];
+            if (isValidBuild(worker.r, worker.c, r, c)) {
+                executeBuild(r, c);
+            }
+        }
+    }
+
+    function executeMove(workerIdx, r, c) {
+        players[currentPlayer].workers[workerIdx] = {r, c};
+        
+        if (board[r][c] === 3) {
+            endGame(currentPlayer);
+            return;
+        }
+
+        phase = 'BUILD';
+        statusEl.textContent = "Construye en una casilla amarilla";
+        renderBoard();
+
+        // Si es turno de la IA después de mover, trigger build AI
+        if (currentPlayer === 'p2') {
+            setTimeout(aiBuild, 600);
+        }
+    }
+
+    function executeBuild(r, c) {
+        board[r][c]++;
+        switchTurn();
+    }
+
+    function switchTurn() {
+        currentPlayer = currentPlayer === 'p1' ? 'p2' : 'p1';
+        phase = 'SELECT_WORKER';
+        selectedWorkerIndex = null;
+        
+        // Check loss by immobilization
+        let canMove = false;
+        players[currentPlayer].workers.forEach(w => {
+            if (hasValidMoves(w.r, w.c)) canMove = true;
+        });
+
+        if (!canMove) {
+            endGame(currentPlayer === 'p1' ? 'p2' : 'p1');
+            return;
+        }
+
+        updateUI();
+        renderBoard();
+
+        if (currentPlayer === 'p2') {
+            isAiThinking = true;
+            statusEl.innerHTML = "<span class='thinking'>La IA está pensando...</span>";
+            setTimeout(aiMove, 800); // Delay para realismo
+        }
+    }
+
+    // --- Reglas ---
+
+    function isValidMove(fromR, fromC, toR, toC) {
+        if (Math.abs(fromR - toR) > 1 || Math.abs(fromC - toC) > 1) return false;
+        if (fromR === toR && fromC === toC) return false;
+        if (isOccupied(toR, toC)) return false;
+        const currentHeight = board[fromR][fromC];
+        const targetHeight = board[toR][toC];
+        if (targetHeight > currentHeight + 1) return false;
+        return true;
+    }
+
+    function isValidBuild(fromR, fromC, toR, toC) {
+        if (Math.abs(fromR - toR) > 1 || Math.abs(fromC - toC) > 1) return false;
+        if (fromR === toR && fromC === toC) return false;
+        if (isOccupied(toR, toC)) return false;
+        if (board[toR][toC] >= MAX_LEVEL) return false;
+        return true;
+    }
+
+    function isOccupied(r, c) {
+        for (let pKey in players) {
+            for (let w of players[pKey].workers) {
+                if (w.r === r && w.c === c) return true;
+            }
+        }
+        return false;
+    }
+
+    function hasValidMoves(r, c) {
+        for (let i = -1; i <= 1; i++) {
+            for (let j = -1; j <= 1; j++) {
+                if (i===0 && j===0) continue;
+                const nr = r + i, nc = c + j;
+                if (nr >= 0 && nr < BOARD_SIZE && nc >= 0 && nc < BOARD_SIZE) {
+                    if (isValidMove(r, c, nr, nc)) return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    function getNeighbors(r, c) {
+        let neighbors = [];
+        for (let i = -1; i <= 1; i++) {
+            for (let j = -1; j <= 1; j++) {
+                if (i===0 && j===0) continue;
+                const nr = r + i, nc = c + j;
+                if (nr >= 0 && nr < BOARD_SIZE && nc >= 0 && nc < BOARD_SIZE) {
+                    neighbors.push({r: nr, c: nc});
+                }
+            }
+        }
+        return neighbors;
+    }
+
+    // --- INTELIGENCIA ARTIFICIAL ---
+
+    function aiMove() {
+        let bestScore = -Infinity;
+        let bestMoves = [];
+
+        // Evaluar cada trabajador
+        players.p2.workers.forEach((worker, wIdx) => {
+            let neighbors = getNeighbors(worker.r, worker.c);
+            
+            neighbors.forEach(target => {
+                if (isValidMove(worker.r, worker.c, target.r, target.c)) {
+                    let score = evaluateMove(worker, target);
+                    
+                    if (score > bestScore) {
+                        bestScore = score;
+                        bestMoves = [{wIdx, target, score}];
+                    } else if (score === bestScore) {
+                        bestMoves.push({wIdx, target, score});
+                    }
+                }
+            });
+        });
+
+        if (bestMoves.length > 0) {
+            // Elegir aleatoriamente entre los mejores para variar
+            const move = bestMoves[Math.floor(Math.random() * bestMoves.length)];
+            selectedWorkerIndex = move.wIdx; // Necesario para que executeBuild sepa quién movió
+            executeMove(move.wIdx, move.target.r, move.target.c);
+        } else {
+            // No debería llegar aquí si checkeamos inmovilidad antes
+            endGame('p1'); 
+        }
+        isAiThinking = false;
+    }
+
+    function aiBuild() {
+        const worker = players.p2.workers[selectedWorkerIndex];
+        let bestScore = -Infinity;
+        let bestBuilds = [];
+        let neighbors = getNeighbors(worker.r, worker.c);
+
+        neighbors.forEach(target => {
+            if (isValidBuild(worker.r, worker.c, target.r, target.c)) {
+                let score = evaluateBuild(worker, target);
+                
+                if (score > bestScore) {
+                    bestScore = score;
+                    bestBuilds = [target];
+                } else if (score === bestScore) {
+                    bestBuilds.push(target);
+                }
+            }
+        });
+
+        if (bestBuilds.length > 0) {
+            const build = bestBuilds[Math.floor(Math.random() * bestBuilds.length)];
+            executeBuild(build.r, build.c);
+        }
+    }
+
+    // Funciones de Evaluación Heurística
+    function evaluateMove(worker, target) {
+        let score = 0;
+        const targetHeight = board[target.r][target.c];
+        const currentHeight = board[worker.r][worker.c];
+
+        // 1. VICTORIA INMEDIATA
+        if (targetHeight === 3) return 10000;
+
+        // 2. SUBIR DE NIVEL (Progreso)
+        if (targetHeight > currentHeight) score += 50 + (targetHeight * 20);
+
+        // 3. CONTROL DEL CENTRO
+        const centerDist = Math.abs(target.r - 2) + Math.abs(target.c - 2);
+        score += (4 - centerDist) * 5;
+
+        // 4. EVITAR QUEDARSE ATRAPADO (Mirar futuro simple)
+        // Simular movimiento y ver cuántas salidas tiene
+        let futureMoves = 0;
+        let neighbors = getNeighbors(target.r, target.c);
+        neighbors.forEach(n => {
+            // Simulación simplificada: ignoramos ocupación temporal
+            if (!isOccupied(n.r, n.c) || (n.r === worker.r && n.c === worker.c)) {
+                if (board[n.r][n.c] <= targetHeight + 1) futureMoves++;
+            }
+        });
+        score += futureMoves * 10;
+
+        // 5. BAJAR ES SEGURO PERO NO DA PUNTOS EXTRA
+        if (targetHeight < currentHeight) score += 5;
+
+        return score;
+    }
+
+    function evaluateBuild(worker, target) {
+        let score = 0;
+        const newHeight = board[target.r][target.c] + 1;
+
+        // 1. CONSTRUIR PARA UNO MISMO (Preparar siguiente turno)
+        // Si puedo construir un nivel al que pueda subir luego
+        let myWorkers = players.p2.workers;
+        myWorkers.forEach(w => {
+            // Distancia Manhattan simple
+            let dist = Math.abs(w.r - target.r) + Math.abs(w.c - target.c);
+            if (dist <= 2) { // Alcance razonable
+                if (newHeight === board[w.r][w.c] + 1) score += 40; // Escalera perfecta
+            }
+        });
+
+        // 2. BLOQUEAR AL OPONENTE (Defensa)
+        let oppWorkers = players.p1.workers;
+        oppWorkers.forEach(ow => {
+            let dist = Math.abs(ow.r - target.r) + Math.abs(ow.c - target.c);
+            if (dist <= 1) { // Adyacente al enemigo
+                // Si el enemigo quería subir ahí
+                if (newHeight > board[ow.r][ow.c] + 1) score += 60; // Bloqueo efectivo
+                // Si completamos nivel 3 debajo de donde podría pararse (no aplica directo, pero nivel 4 es techo)
+                if (newHeight === 3) score += 30; // Crear torre alta cerca del enemigo limita espacio
+            }
+        });
+
+        // 3. RELLENO GENERAL (Evitar huecos inútiles)
+        score += newHeight * 2;
+
+        return score;
+    }
+
+    // --- Fin de Juego y Render ---
+
+    function endGame(winnerKey) {
+        winner = winnerKey;
+        phase = 'GAME_OVER';
+        isAiThinking = false;
+        const text = winnerKey === 'p1' ? "¡GANASTE!" : "LA IA GANA";
+        statusEl.textContent = text;
+        statusEl.style.color = winnerKey === 'p1' ? '#2ecc71' : '#e74c3c';
+        renderBoard();
+    }
+
+    function resetGame() {
+        statusEl.style.color = '#f1c40f';
+        initGame();
+    }
+
+    function updateUI() {
+        p1Badge.classList.toggle('active', currentPlayer === 'p1');
+        p2Badge.classList.toggle('active', currentPlayer === 'p2');
+        if (!winner && !isAiThinking) {
+            statusEl.textContent = currentPlayer === 'p1' ? "Tu turno" : "Turno IA";
+        }
+    }
+
+    function renderBoard() {
+        boardEl.innerHTML = '';
+        
+        let validTargets = new Set();
+        let type = '';
+
+        // Solo mostrar ayudas si es turno humano y no ha terminado
+        if (!winner && !isAiThinking && currentPlayer === 'p1' && selectedWorkerIndex !== null) {
+            const w = players.p1.workers[selectedWorkerIndex];
+            for (let i = -1; i <= 1; i++) {
+                for (let j = -1; j <= 1; j++) {
+                    if (i===0 && j===0) continue;
+                    const nr = w.r + i, nc = w.c + j;
+                    if (nr >= 0 && nr < BOARD_SIZE && nc >= 0 && nc < BOARD_SIZE) {
+                        if (phase === 'MOVE' && isValidMove(w.r, w.c, nr, nc)) {
+                            validTargets.add(`${nr},${nc}`); type = 'move';
+                        } else if (phase === 'BUILD' && isValidBuild(w.r, w.c, nr, nc)) {
+                            validTargets.add(`${nr},${nc}`); type = 'build';
+                        }
+                    }
+                }
+            }
+        }
+
+        for (let r = 0; r < BOARD_SIZE; r++) {
+            for (let c = 0; c < BOARD_SIZE; c++) {
+                const cell = document.createElement('div');
+                cell.className = 'cell';
+                cell.onclick = () => handleCellClick(r, c);
+
+                const level = board[r][c];
+                for (let l = 0; l <= level; l++) {
+                    const layer = document.createElement('div');
+                    layer.className = `building-layer layer-${l}`;
+                    cell.appendChild(layer);
+                }
+
+                let workerHere = null;
+                let isSelected = false;
+                
+                players.p1.workers.forEach((w, idx) => {
+                    if (w.r === r && w.c === c) {
+                        workerHere = 'p1';
+                        if (idx === selectedWorkerIndex) isSelected = true;
+                    }
+                });
+                players.p2.workers.forEach((w, idx) => {
+                    if (w.r === r && w.c === c) {
+                        workerHere = 'p2';
+                        if (idx === selectedWorkerIndex) isSelected = true;
+                    }
+                });
+
+                if (workerHere) {
+                    const workerDiv = document.createElement('div');
+                    workerDiv.className = `worker ${workerHere} ${isSelected ? 'selected' : ''}`;
+                    workerDiv.style.bottom = `${level * 20 + 10}px`;
+                    cell.appendChild(workerDiv);
+                }
+
+                if (validTargets.has(`${r},${c}`)) {
+                    cell.classList.add(type === 'move' ? 'highlight-move' : 'highlight-build');
+                }
+
+                boardEl.appendChild(cell);
+            }
+        }
+    }
+
+    initGame();
+</script>
+</body>
+</html>

@@ -1,0 +1,657 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Stack - Torre Perfecta</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            overflow: hidden;
+            background: #1a1a2e;
+            font-family: 'Segoe UI', Arial, sans-serif;
+            touch-action: none;
+            user-select: none;
+        }
+        canvas { display: block; }
+
+        #ui {
+            position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+            pointer-events: none; z-index: 10;
+            display: flex; flex-direction: column;
+            align-items: center; justify-content: flex-start;
+            padding-top: 60px;
+        }
+        #score-display {
+            font-size: 80px; font-weight: 900; color: white;
+            text-shadow: 0 4px 15px rgba(0,0,0,0.3);
+            line-height: 1; transition: transform 0.1s;
+        }
+        #score-display.pop { transform: scale(1.3); }
+        #best-display {
+            font-size: 16px; color: rgba(255,255,255,0.5);
+            margin-top: 8px; letter-spacing: 2px;
+        }
+        #combo-display {
+            font-size: 24px; font-weight: bold; color: #ffd93d;
+            margin-top: 15px; opacity: 0; transition: all 0.3s;
+            text-shadow: 0 0 20px rgba(255,217,61,0.5);
+        }
+        #combo-display.visible { opacity: 1; transform: scale(1.2); }
+
+        #perfect-flash {
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(255,255,255,0.15);
+            pointer-events: none; z-index: 5;
+            opacity: 0; transition: opacity 0.15s;
+        }
+        #perfect-flash.active { opacity: 1; }
+
+        #overlay {
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.85);
+            display: flex; justify-content: center; align-items: center;
+            z-index: 100; backdrop-filter: blur(5px);
+        }
+        #overlay.hidden { display: none; }
+
+        .menu-box {
+            background: rgba(255,255,255,0.08);
+            border: 1px solid rgba(255,255,255,0.15);
+            border-radius: 24px; padding: 45px;
+            text-align: center; max-width: 380px; width: 90%;
+        }
+        .menu-box h1 {
+            font-size: 48px; color: white; margin-bottom: 5px;
+            letter-spacing: 8px; font-weight: 100;
+        }
+        .menu-box .subtitle {
+            color: rgba(255,255,255,0.5); font-size: 14px;
+            margin-bottom: 30px; letter-spacing: 3px;
+        }
+        .menu-box .final-score {
+            font-size: 72px; font-weight: 900; line-height: 1;
+            background: linear-gradient(135deg, #ff6b6b, #feca57, #48dbfb);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin: 15px 0;
+        }
+        .menu-box .label {
+            color: rgba(255,255,255,0.4); font-size: 11px;
+            text-transform: uppercase; letter-spacing: 3px;
+        }
+        .menu-box .stats {
+            display: flex; justify-content: center; gap: 30px;
+            margin: 20px 0; color: rgba(255,255,255,0.6); font-size: 14px;
+        }
+        .menu-box button {
+            margin-top: 25px; padding: 16px 55px;
+            background: white; color: #1a1a2e;
+            border: none; border-radius: 50px;
+            font-size: 18px; font-weight: bold; cursor: pointer;
+            transition: all 0.2s; letter-spacing: 2px;
+        }
+        .menu-box button:hover { transform: scale(1.05); box-shadow: 0 5px 25px rgba(255,255,255,0.3); }
+        .menu-box button:active { transform: scale(0.95); }
+
+        .tap-hint {
+            position: absolute; bottom: 40px; left: 0; right: 0;
+            text-align: center; color: rgba(255,255,255,0.3);
+            font-size: 14px; pointer-events: none; z-index: 10;
+            animation: pulse-hint 2s infinite;
+        }
+        @keyframes pulse-hint { 0%,100% { opacity: 0.3; } 50% { opacity: 0.7; } }
+    </style>
+</head>
+<body>
+
+<canvas id="canvas"></canvas>
+<div id="perfect-flash"></div>
+
+<div id="ui">
+    <div id="score-display">0</div>
+    <div id="best-display">MEJOR: 0</div>
+    <div id="combo-display">PERFECTO x3</div>
+</div>
+
+<div class="tap-hint" id="hint">TOCA para colocar el bloque</div>
+
+<div id="overlay">
+    <div class="menu-box" id="menu-content">
+        <h1>STACK</h1>
+        <p class="subtitle">Apila. Alinea. Perfecciona.</p>
+        <button onclick="startGame()">JUGAR</button>
+    </div>
+</div>
+
+<script>
+// ===== CONFIGURACIÓN =====
+const BLOCK_HEIGHT = 28;
+const INITIAL_WIDTH = 200;
+const PERFECT_THRESHOLD = 5; // Pixels de tolerancia para "perfecto"
+const BASE_SPEED = 3;
+const SPEED_INCREMENT = 0.08;
+const MAX_SPEED = 9;
+
+// Paleta de colores HSL que rota con la altura
+function getColor(index) {
+    const hue = (index * 8 + 200) % 360;
+    return `hsl(${hue}, 70%, 60%)`;
+}
+
+function getDarkerColor(index) {
+    const hue = (index * 8 + 200) % 360;
+    return `hsl(${hue}, 70%, 40%)`;
+}
+
+function getLighterColor(index) {
+    const hue = (index * 8 + 200) % 360;
+    return `hsl(${hue}, 70%, 75%)`;
+}
+
+// ===== ESTADO =====
+let canvas, ctx, W, H;
+let game = {
+    running: false,
+    score: 0,
+    best: parseInt(localStorage.getItem('stackBest')) || 0,
+    stack: [],          // Bloques colocados
+    currentBlock: null, // Bloque en movimiento
+    debris: [],         // Trozos cortados que caen
+    particles: [],      // Partículas de efecto perfecto
+    cameraY: 0,
+    targetCameraY: 0,
+    combo: 0,
+    speed: BASE_SPEED,
+    direction: 1,       // 1 = derecha, -1 = izquierda
+    axis: 'x',          // 'x' o 'z' (alternamos eje cada bloque)
+    gameOverAnim: 0
+};
+
+// ===== CLASES =====
+
+class Block {
+    constructor(x, z, width, depth, colorIndex) {
+        this.x = x;
+        this.z = z;
+        this.width = width;
+        this.depth = depth;
+        this.colorIndex = colorIndex;
+        this.y = 0; // Se calcula según posición en stack
+    }
+}
+
+class Debris {
+    constructor(x, z, width, depth, y, colorIndex) {
+        this.x = x;
+        this.z = z;
+        this.width = width;
+        this.depth = depth;
+        this.y = y;
+        this.vy = 0;
+        this.vx = (Math.random() - 0.5) * 2;
+        this.vz = (Math.random() - 0.5) * 2;
+        this.colorIndex = colorIndex;
+        this.life = 1;
+        this.rotation = 0;
+        this.rotSpeed = (Math.random() - 0.5) * 0.1;
+    }
+
+    update(dt) {
+        this.vy -= 0.4 * dt; // Gravedad
+        this.y += this.vy * dt;
+        this.x += this.vx * dt;
+        this.z += this.vz * dt;
+        this.rotation += this.rotSpeed * dt;
+        this.life -= 0.015 * dt;
+    }
+}
+
+// ===== LÓGICA DEL JUEGO =====
+
+function startGame() {
+    document.getElementById('overlay').classList.add('hidden');
+    document.getElementById('hint').style.display = 'block';
+
+    game.running = true;
+    game.score = 0;
+    game.stack = [];
+    game.debris = [];
+    game.particles = [];
+    game.cameraY = 0;
+    game.targetCameraY = 0;
+    game.combo = 0;
+    game.speed = BASE_SPEED;
+    game.direction = 1;
+    game.axis = 'x';
+    game.gameOverAnim = 0;
+
+    // Base inicial
+    const base = new Block(0, 0, INITIAL_WIDTH, INITIAL_WIDTH, 0);
+    game.stack.push(base);
+
+    spawnNextBlock();
+    updateScore();
+    lastTime = performance.now();
+    requestAnimationFrame(loop);
+}
+
+function spawnNextBlock() {
+    const prev = game.stack[game.stack.length - 1];
+    const colorIndex = game.stack.length;
+
+    // Alternar eje: X, Z, X, Z...
+    game.axis = game.stack.length % 2 === 1 ? 'x' : 'z';
+
+    const block = new Block(
+        game.axis === 'x' ? -INITIAL_WIDTH * 1.5 : prev.x,
+        game.axis === 'z' ? -INITIAL_WIDTH * 1.5 : prev.z,
+        prev.width,
+        prev.depth,
+        colorIndex
+    );
+
+    game.currentBlock = block;
+    game.direction = game.stack.length % 2 === 1 ? 1 : 1;
+}
+
+function placeBlock() {
+    if (!game.running || !game.currentBlock) return;
+
+    const curr = game.currentBlock;
+    const prev = game.stack[game.stack.length - 1];
+
+    let overlap, diff, cutSize, cutPos;
+
+    if (game.axis === 'x') {
+        diff = curr.x - prev.x;
+        const absDiff = Math.abs(diff);
+
+        // Verificar si hay solapamiento
+        if (absDiff >= prev.width) {
+            // Falló completamente
+            die();
+            return;
+        }
+
+        // Calcular solapamiento
+        if (diff > 0) {
+            overlap = prev.width - diff;
+            cutSize = diff;
+            cutPos = curr.x + overlap / 2 + cutSize / 2;
+        } else {
+            overlap = prev.width + diff;
+            cutSize = -diff;
+            cutPos = curr.x - overlap / 2 - cutSize / 2;
+        }
+
+        // ¿Perfecto?
+        if (absDiff <= PERFECT_THRESHOLD) {
+            // Perfecto: no cortar, mantener ancho completo del anterior
+            curr.x = prev.x;
+            curr.width = prev.width;
+            game.combo++;
+            triggerPerfectEffect();
+        } else {
+            // Cortar
+            curr.x = prev.x + diff / 2;
+            curr.width = overlap;
+            game.combo = 0;
+
+            // Crear debris
+            game.debris.push(new Debris(
+                cutPos, curr.z, cutSize, curr.depth,
+                game.stack.length * BLOCK_HEIGHT, curr.colorIndex
+            ));
+        }
+    } else {
+        // Eje Z
+        diff = curr.z - prev.z;
+        const absDiff = Math.abs(diff);
+
+        if (absDiff >= prev.depth) {
+            die();
+            return;
+        }
+
+        if (diff > 0) {
+            overlap = prev.depth - diff;
+            cutSize = diff;
+            cutPos = curr.z + overlap / 2 + cutSize / 2;
+        } else {
+            overlap = prev.depth + diff;
+            cutSize = -diff;
+            cutPos = curr.z - overlap / 2 - cutSize / 2;
+        }
+
+        if (absDiff <= PERFECT_THRESHOLD) {
+            curr.z = prev.z;
+            curr.depth = prev.depth;
+            game.combo++;
+            triggerPerfectEffect();
+        } else {
+            curr.z = prev.z + diff / 2;
+            curr.depth = overlap;
+            game.combo = 0;
+
+            game.debris.push(new Debris(
+                curr.x, cutPos, curr.width, cutSize,
+                game.stack.length * BLOCK_HEIGHT, curr.colorIndex
+            ));
+        }
+    }
+
+    // Añadir al stack
+    game.stack.push(curr);
+    game.score++;
+    game.speed = Math.min(MAX_SPEED, BASE_SPEED + game.score * SPEED_INCREMENT);
+
+    // Cámara sube
+    game.targetCameraY = Math.max(0, (game.stack.length - 8) * BLOCK_HEIGHT);
+
+    updateScore();
+    spawnNextBlock();
+}
+
+function triggerPerfectEffect() {
+    // Flash blanco
+    const flash = document.getElementById('perfect-flash');
+    flash.classList.add('active');
+    setTimeout(() => flash.classList.remove('active'), 150);
+
+    // Partículas
+    const topY = game.stack.length * BLOCK_HEIGHT - game.cameraY;
+    for (let i = 0; i < 15; i++) {
+        game.particles.push({
+            x: W / 2 + (Math.random() - 0.5) * 100,
+            y: H - 150 - topY + game.cameraY + (Math.random() - 0.5) * 20,
+            vx: (Math.random() - 0.5) * 6,
+            vy: -2 - Math.random() * 4,
+            life: 1,
+            color: '#ffd93d',
+            size: 2 + Math.random() * 4
+        });
+    }
+
+    // Combo display
+    const comboEl = document.getElementById('combo-display');
+    comboEl.innerText = `✨ PERFECTO x${game.combo}`;
+    comboEl.classList.add('visible');
+    clearTimeout(comboEl._timeout);
+    comboEl._timeout = setTimeout(() => comboEl.classList.remove('visible'), 1500);
+
+    // Score pop
+    const scoreEl = document.getElementById('score-display');
+    scoreEl.classList.add('pop');
+    setTimeout(() => scoreEl.classList.remove('pop'), 100);
+}
+
+function die() {
+    game.running = false;
+    game.gameOverAnim = 1;
+
+    // El bloque actual cae como debris
+    if (game.currentBlock) {
+        game.debris.push(new Debris(
+            game.currentBlock.x, game.currentBlock.z,
+            game.currentBlock.width, game.currentBlock.depth,
+            game.stack.length * BLOCK_HEIGHT, game.currentBlock.colorIndex
+        ));
+        game.currentBlock = null;
+    }
+
+    const finalScore = game.score;
+    if (finalScore > game.best) {
+        game.best = finalScore;
+        localStorage.setItem('stackBest', game.best);
+    }
+
+    setTimeout(() => showGameOver(finalScore), 1200);
+}
+
+function showGameOver(score) {
+    const mc = document.getElementById('menu-content');
+    mc.innerHTML = `
+        <div class="label">PUNTUACIÓN</div>
+        <div class="final-score">${score}</div>
+        <div class="stats">
+            <div>🏆 Mejor: ${game.best}</div>
+        </div>
+        <button onclick="startGame()">REINTENTAR</button>
+    `;
+    document.getElementById('overlay').classList.remove('hidden');
+}
+
+function updateScore() {
+    document.getElementById('score-display').innerText = game.score;
+    document.getElementById('best-display').innerText = `MEJOR: ${game.best}`;
+}
+
+// ===== UPDATE =====
+
+let lastTime = 0;
+function loop(timestamp) {
+    const dt = Math.min((timestamp - lastTime) / 16.67, 2.5);
+    lastTime = timestamp;
+
+    if (game.running && game.currentBlock) {
+        // Mover bloque actual
+        if (game.axis === 'x') {
+            game.currentBlock.x += game.speed * game.direction * dt;
+            // Rebotar en límites
+            if (game.currentBlock.x > INITIAL_WIDTH * 1.2) game.direction = -1;
+            if (game.currentBlock.x < -INITIAL_WIDTH * 1.2) game.direction = 1;
+        } else {
+            game.currentBlock.z += game.speed * game.direction * dt;
+            if (game.currentBlock.z > INITIAL_WIDTH * 1.2) game.direction = -1;
+            if (game.currentBlock.z < -INITIAL_WIDTH * 1.2) game.direction = 1;
+        }
+    }
+
+    // Cámara suave
+    game.cameraY += (game.targetCameraY - game.cameraY) * 0.08 * dt;
+
+    // Debris
+    game.debris.forEach(d => d.update(dt));
+    game.debris = game.debris.filter(d => d.life > 0 && d.y > -200);
+
+    // Partículas
+    game.particles.forEach(p => {
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+        p.vy += 0.15 * dt;
+        p.life -= 0.025 * dt;
+    });
+    game.particles = game.particles.filter(p => p.life > 0);
+
+    draw();
+    requestAnimationFrame(loop);
+}
+
+// ===== RENDERIZADO ISOMÉTRICO =====
+
+// Proyección isométrica simple
+function isoProject(x, y, z) {
+    const isoX = (x - z) * 0.7;
+    const isoY = (x + z) * 0.35 - y;
+    return {
+        x: W / 2 + isoX,
+        y: H - 120 + isoY
+    };
+}
+
+function draw() {
+    // Fondo gradiente dinámico
+    const hue = (game.score * 3 + 220) % 360;
+    const grad = ctx.createLinearGradient(0, 0, 0, H);
+    grad.addColorStop(0, `hsl(${hue}, 30%, 12%)`);
+    grad.addColorStop(1, `hsl(${(hue + 40) % 360}, 40%, 18%)`);
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, W, H);
+
+    // Dibujar stack
+    game.stack.forEach((block, i) => {
+        const by = i * BLOCK_HEIGHT - game.cameraY;
+        drawIsoBlock(block.x, by, block.z, block.width, BLOCK_HEIGHT, block.depth, block.colorIndex);
+    });
+
+    // Dibujar bloque actual
+    if (game.currentBlock) {
+        const by = game.stack.length * BLOCK_HEIGHT - game.cameraY;
+        drawIsoBlock(
+            game.currentBlock.x, by, game.currentBlock.z,
+            game.currentBlock.width, BLOCK_HEIGHT, game.currentBlock.depth,
+            game.currentBlock.colorIndex, true
+        );
+    }
+
+    // Dibujar debris
+    game.debris.forEach(d => {
+        const dy = d.y - game.cameraY;
+        ctx.globalAlpha = Math.max(0, d.life);
+        drawIsoBlock(d.x, dy, d.z, d.width, BLOCK_HEIGHT, d.depth, d.colorIndex);
+        ctx.globalAlpha = 1;
+    });
+
+    // Partículas
+    game.particles.forEach(p => {
+        ctx.globalAlpha = Math.max(0, p.life);
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size * p.life, 0, Math.PI * 2);
+        ctx.fill();
+    });
+    ctx.globalAlpha = 1;
+
+    // Guía visual del siguiente eje
+    if (game.running && game.currentBlock) {
+        const topY = game.stack.length * BLOCK_HEIGHT - game.cameraY;
+        const prev = game.stack[game.stack.length - 1];
+        const guidePos = isoProject(prev.x, topY + 30, prev.z);
+
+        ctx.fillStyle = 'rgba(255,255,255,0.15)';
+        ctx.font = '12px Arial';
+        ctx.textAlign = 'center';
+        // Pequeña flecha indicando dirección
+        const arrow = game.axis === 'x' ? '↔' : '↕';
+        ctx.fillText(arrow, guidePos.x, guidePos.y + 20);
+    }
+}
+
+function drawIsoBlock(x, y, z, w, h, d, colorIndex, isCurrent = false) {
+    const hw = w / 2;
+    const hd = d / 2;
+
+    // 8 vértices del cubo
+    const vertices = [
+        isoProject(x - hw, y, z - hd),     // 0: front-left-bottom
+        isoProject(x + hw, y, z - hd),     // 1: front-right-bottom
+        isoProject(x + hw, y, z + hd),     // 2: back-right-bottom
+        isoProject(x - hw, y, z + hd),     // 3: back-left-bottom
+        isoProject(x - hw, y + h, z - hd), // 4: front-left-top
+        isoProject(x + hw, y + h, z - hd), // 5: front-right-top
+        isoProject(x + hw, y + h, z + hd), // 6: back-right-top
+        isoProject(x - hw, y + h, z + hd)  // 7: back-left-top
+    ];
+
+    // Cara superior (más clara)
+    ctx.fillStyle = getLighterColor(colorIndex);
+    ctx.beginPath();
+    ctx.moveTo(vertices[4].x, vertices[4].y);
+    ctx.lineTo(vertices[5].x, vertices[5].y);
+    ctx.lineTo(vertices[6].x, vertices[6].y);
+    ctx.lineTo(vertices[7].x, vertices[7].y);
+    ctx.closePath();
+    ctx.fill();
+
+    // Borde superior sutil
+    if (isCurrent) {
+        ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+    }
+
+    // Cara derecha (normal)
+    ctx.fillStyle = getColor(colorIndex);
+    ctx.beginPath();
+    ctx.moveTo(vertices[1].x, vertices[1].y);
+    ctx.lineTo(vertices[2].x, vertices[2].y);
+    ctx.lineTo(vertices[6].x, vertices[6].y);
+    ctx.lineTo(vertices[5].x, vertices[5].y);
+    ctx.closePath();
+    ctx.fill();
+
+    // Cara frontal (más oscura)
+    ctx.fillStyle = getDarkerColor(colorIndex);
+    ctx.beginPath();
+    ctx.moveTo(vertices[0].x, vertices[0].y);
+    ctx.lineTo(vertices[1].x, vertices[1].y);
+    ctx.lineTo(vertices[5].x, vertices[5].y);
+    ctx.lineTo(vertices[4].x, vertices[4].y);
+    ctx.closePath();
+    ctx.fill();
+
+    // Bordes sutiles
+    ctx.strokeStyle = 'rgba(0,0,0,0.1)';
+    ctx.lineWidth = 0.5;
+    ctx.beginPath();
+    ctx.moveTo(vertices[4].x, vertices[4].y);
+    ctx.lineTo(vertices[5].x, vertices[5].y);
+    ctx.lineTo(vertices[6].x, vertices[6].y);
+    ctx.lineTo(vertices[7].x, vertices[7].y);
+    ctx.closePath();
+    ctx.stroke();
+}
+
+// ===== INPUT =====
+
+function handleTap() {
+    if (game.running) {
+        placeBlock();
+        document.getElementById('hint').style.display = 'none';
+    }
+}
+
+// Click
+window.addEventListener('mousedown', e => {
+    if (e.target.tagName !== 'BUTTON') handleTap();
+});
+
+// Touch
+window.addEventListener('touchstart', e => {
+    if (e.target.tagName !== 'BUTTON') {
+        e.preventDefault();
+        handleTap();
+    }
+}, { passive: false });
+
+// Espacio
+window.addEventListener('keydown', e => {
+    if (e.code === 'Space') {
+        e.preventDefault();
+        handleTap();
+    }
+});
+
+// ===== INIT =====
+
+canvas = document.getElementById('canvas');
+ctx = canvas.getContext('2d');
+
+function resize() {
+    W = window.innerWidth;
+    H = window.innerHeight;
+    canvas.width = W;
+    canvas.height = H;
+}
+window.addEventListener('resize', resize);
+resize();
+
+// Fondo inicial
+ctx.fillStyle = '#1a1a2e';
+ctx.fillRect(0, 0, W, H);
+
+</script>
+</body>
+</html>

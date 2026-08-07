@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Sumo Arena: Rey de la Colina</title>
+    <style>
+        :root {
+            --bg: #1a1a2e;
+            --p1: #3b82f6;
+            --p2: #ef4444;
+            --hill: rgba(250, 204, 21, 0.15);
+            --hill-border: rgba(250, 204, 21, 0.6);
+            --text: #f8fafc;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; user-select: none; }
+        
+        body {
+            background: var(--bg);
+            color: var(--text);
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            overflow: hidden;
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        canvas { display: block; border-radius: 50%; box-shadow: 0 0 60px rgba(0,0,0,0.5); }
+
+        /* UI Overlay */
+        .ui { position: absolute; inset: 0; pointer-events: none; padding: 20px; display: flex; flex-direction: column; justify-content: space-between; z-index: 10; }
+        
+        .score-bar {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 15px 30px;
+            background: rgba(0,0,0,0.6); backdrop-filter: blur(10px);
+            border-radius: 15px; margin: 0 auto; max-width: 600px; width: 90%;
+        }
+        
+        .player-score { text-align: center; min-width: 120px; }
+        .p-name { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 2px; opacity: 0.7; margin-bottom: 5px; }
+        .p-score { font-size: 2.5rem; font-weight: 900; line-height: 1; }
+        .p1-color { color: var(--p1); }
+        .p2-color { color: var(--p2); }
+        
+        .timer { 
+            font-size: 1.5rem; font-weight: bold; 
+            background: rgba(255,255,255,0.1); padding: 8px 20px; border-radius: 10px;
+        }
+
+        .controls-hint {
+            text-align: center; font-size: 0.75rem; opacity: 0.5;
+            padding: 10px;
+        }
+        .key { background: rgba(255,255,255,0.15); padding: 2px 8px; border-radius: 4px; font-family: monospace; font-weight: bold; margin: 0 2px; }
+
+        /* Modals */
+        .modal {
+            position: absolute; inset: 0; background: rgba(0,0,0,0.85);
+            backdrop-filter: blur(8px);
+            display: flex; align-items: center; justify-content: center;
+            z-index: 100; pointer-events: auto;
+        }
+        .modal.hidden { display: none; }
+        
+        .card {
+            background: #16213e; padding: 40px 50px; border-radius: 20px;
+            text-align: center; border: 1px solid rgba(255,255,255,0.1);
+            box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+            max-width: 500px; width: 90%;
+        }
+        
+        h1 { font-size: 2.5rem; margin-bottom: 5px; background: linear-gradient(to right, var(--p1), var(--p2)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        h2 { font-size: 1.8rem; margin-bottom: 15px; }
+        p { opacity: 0.7; margin-bottom: 20px; line-height: 1.6; }
+        
+        .mode-select { display: flex; gap: 10px; justify-content: center; margin-bottom: 20px; }
+        .mode-btn {
+            background: rgba(255,255,255,0.1); border: 2px solid transparent;
+            padding: 12px 20px; border-radius: 10px; cursor: pointer;
+            color: white; font-weight: bold; transition: all 0.2s;
+        }
+        .mode-btn:hover, .mode-btn.active { border-color: var(--hill-border); background: rgba(250,204,21,0.1); }
+        
+        button.primary {
+            background: linear-gradient(135deg, var(--p1), #8b5cf6);
+            color: white; border: none; padding: 15px 40px;
+            font-size: 1.2rem; font-weight: bold; border-radius: 12px;
+            cursor: pointer; transition: transform 0.1s;
+        }
+        button.primary:hover { transform: scale(1.05); }
+        button.primary:active { transform: scale(0.97); }
+
+        .winner-text { font-size: 3rem; font-weight: 900; margin-bottom: 10px; }
+    </style>
+</head>
+<body>
+
+<canvas id="arena"></canvas>
+
+<div class="ui">
+    <div class="score-bar">
+        <div class="player-score">
+            <div class="p-name p1-color">JUGADOR 1</div>
+            <div class="p-score p1-color" id="scoreP1">0</div>
+        </div>
+        <div class="timer" id="roundTimer">60</div>
+        <div class="player-score">
+            <div class="p-name p2-color">JUGADOR 2</div>
+            <div class="p-score p2-color" id="scoreP2">0</div>
+        </div>
+    </div>
+    <div class="controls-hint">
+        <span class="key">W</span><span class="key">A</span><span class="key">S</span><span class="key">D</span> P1 &nbsp;|&nbsp; 
+        <span class="key">↑</span><span class="key">←</span><span class="key">↓</span><span class="key">→</span> P2
+    </div>
+</div>
+
+<!-- Pantalla Inicio -->
+<div id="startScreen" class="modal">
+    <div class="card">
+        <h1>SUMO ARENA</h1>
+        <p>Mantente dentro del círculo dorado.<br>Empuja a tu rival fuera. ¡El último en pie gana!</p>
+        
+        <div class="mode-select">
+            <div class="mode-btn active" onclick="setMode('pvp')" id="btnPvP">👥 2 Jugadores</div>
+            <div class="mode-btn" onclick="setMode('ai')" id="btnAI">🤖 vs IA</div>
+        </div>
+        
+        <button class="primary" onclick="startGame()">¡LUCHAR!</button>
+    </div>
+</div>
+
+<!-- Pantalla Fin de Ronda -->
+<div id="endScreen" class="modal hidden">
+    <div class="card">
+        <div class="winner-text" id="winnerText">¡P1 GANA!</div>
+        <p id="endMsg">Dominio total de la colina.</p>
+        <button class="primary" onclick="resetRound()">SIGUIENTE RONDA</button>
+    </div>
+</div>
+
+<script>
+/**
+ * SUMO ARENA: KING OF THE HILL
+ * Física de empuje, colisiones circulares y IA básica
+ */
+
+const canvas = document.getElementById('arena');
+const ctx = canvas.getContext('2d');
+
+// Configuración
+const CFG = {
+    radius: 280,      // Radio de la arena
+    hillRadius: 120,  // Radio de la zona de puntos
+    playerRadius: 22,
+    mass: 1,
+    friction: 0.92,
+    accel: 0.8,
+    maxSpeed: 6,
+    bounce: 0.5,
+    roundTime: 60,
+    winScore: 100     // Puntos para ganar ronda
+};
+
+// Estado
+const state = {
+    mode: 'pvp', // 'pvp' o 'ai'
+    active: false,
+    time: CFG.roundTime,
+    scores: { p1: 0, p2: 0 },
+    particles: [],
+    shake: 0
+};
+
+// Jugadores
+const players = [
+    { x: -100, y: 0, vx: 0, vy: 0, color: '#3b82f6', id: 'p1', inHill: false },
+    { x: 100, y: 0, vx: 0, vy: 0, color: '#ef4444', id: 'p2', inHill: false }
+];
+
+// Input
+const keys = {};
+window.addEventListener('keydown', e => {
+    keys[e.code] = true;
+    if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space'].includes(e.code)) e.preventDefault();
+});
+window.addEventListener('keyup', e => keys[e.code] = false);
+
+// Resize circular
+function resize() {
+    const size = Math.min(window.innerWidth, window.innerHeight) * 0.9;
+    canvas.width = size;
+    canvas.height = size;
+    CFG.radius = size / 2 - 10;
+    CFG.hillRadius = CFG.radius * 0.4;
+}
+window.addEventListener('resize', resize);
+resize();
+
+// --- AUDIO PROCEDURAL ---
+const Audio = {
+    ctx: null,
+    init() { try { this.ctx = new (window.AudioContext || window.webkitAudioContext)(); } catch(e){} },
+    beep(f, t, d, v=0.1) {
+        if (!this.ctx) return;
+        try {
+            const o = this.ctx.createOscillator(), g = this.ctx.createGain();
+            o.type = t; o.frequency.value = f;
+            o.connect(g); g.connect(this.ctx.destination);
+            g.gain.setValueAtTime(v, this.ctx.currentTime);
+            g.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + d);
+            o.start(); o.stop(this.ctx.currentTime + d);
+        } catch(e){}
+    },
+    hit() { this.beep(150, 'sawtooth', 0.15, 0.15); },
+    score() { this.beep(600, 'sine', 0.1, 0.08); setTimeout(() => this.beep(900, 'sine', 0.15, 0.08), 80); },
+    win() { this.beep(400,'square',0.1); setTimeout(()=>this.beep(600,'square',0.1),100); setTimeout(()=>this.beep(800,'square',0.3),200); },
+    push() { this.beep(80, 'triangle', 0.1, 0.1); }
+};
+
+// --- LÓGICA ---
+
+function setMode(mode) {
+    state.mode = mode;
+    document.getElementById('btnPvP').classList.toggle('active', mode === 'pvp');
+    document.getElementById('btnAI').classList.toggle('active', mode === 'ai');
+}
+
+function startGame() {
+    Audio.init();
+    document.getElementById('startScreen').classList.add('hidden');
+    resetRound();
+}
+
+function resetRound() {
+    players[0].x = -CFG.hillRadius * 0.6; players[0].y = 0;
+    players[0].vx = 0; players[0].vy = 0;
+    
+    players[1].x = CFG.hillRadius * 0.6; players[1].y = 0;
+    players[1].vx = 0; players[1].vy = 0;
+    
+    state.scores = { p1: 0, p2: 0 };
+    state.time = CFG.roundTime;
+    state.particles = [];
+    state.shake = 0;
+    state.active = true;
+    
+    document.getElementById('endScreen').classList.add('hidden');
+    updateUI();
+    
+    lastTime = performance.now();
+    requestAnimationFrame(loop);
+}
+
+function endRound(winner) {
+    state.active = false;
+    Audio.win();
+    
+    const winnerName = winner === 'p1' ? 'JUGADOR 1' : (state.mode === 'ai' ? 'IA' : 'JUGADOR 2');
+    const color = winner === 'p1' ? 'var(--p1)' : 'var(--p2)';
+    
+    document.getElementById('winnerText').innerText = `¡${winnerName} GANA!`;
+    document.getElementById('winnerText').style.color = color;
+    document.getElementById('endMsg').innerText = `${state.scores.p1} - ${state.scores.p2}`;
+    document.getElementById('endScreen').classList.remove('hidden');
+}
+
+// --- FÍSICA ---
+
+function update(dt) {
+    if (!state.active) return;
+    
+    // Timer
+    state.time -= dt;
+    if (state.time <= 0) {
+        const winner = state.scores.p1 >= state.scores.p2 ? 'p1' : 'p2';
+        endRound(winner);
+        return;
+    }
+    
+    // Controles P1
+    let ax1 = 0, ay1 = 0;
+    if (keys['KeyW'] || keys['ArrowUp'] && state.mode === 'ai') ay1 -= 1;
+    if (keys['KeyS']) ay1 += 1;
+    if (keys['KeyA']) ax1 -= 1;
+    if (keys['KeyD']) ax1 += 1;
+    
+    // Normalizar diagonal
+    if (ax1 !== 0 || ay1 !== 0) {
+        const len = Math.sqrt(ax1*ax1 + ay1*ay1);
+        ax1 /= len; ay1 /= len;
+    }
+    
+    players[0].vx += ax1 * CFG.accel;
+    players[0].vy += ay1 * CFG.accel;
+    
+    // Controles P2 (Humano o IA)
+    let ax2 = 0, ay2 = 0;
+    if (state.mode === 'pvp') {
+        if (keys['ArrowUp']) ay2 -= 1;
+        if (keys['ArrowDown']) ay2 += 1;
+        if (keys['ArrowLeft']) ax2 -= 1;
+        if (keys['ArrowRight']) ax2 += 1;
+    } else {
+        // IA Simple: ir al centro + evitar bordes + empujar si cerca
+        const p2 = players[1];
+        const distToCenter = Math.sqrt(p2.x*p2.x + p2.y*p2.y);
+        
+        // Ir hacia el centro
+        if (distToCenter > 20) {
+            ax2 = -p2.x / distToCenter;
+            ay2 = -p2.y / distToCenter;
+        }
+        
+        // Si P1 está cerca y dentro de la colina, atacar
+        const dx = players[0].x - p2.x;
+        const dy = players[0].y - p2.y;
+        const distToP1 = Math.sqrt(dx*dx + dy*dy);
+        
+        if (distToP1 < 100 && players[0].inHill) {
+            ax2 = dx / distToP1;
+            ay2 = dy / distToP1;
+        }
+        
+        // Evitar borde
+        if (distToCenter > CFG.radius * 0.7) {
+            ax2 += (-p2.x / distToCenter) * 2;
+            ay2 += (-p2.y / distToCenter) * 2;
+        }
+    }
+    
+    if (ax2 !== 0 || ay2 !== 0) {
+        const len = Math.sqrt(ax2*ax2 + ay2*ay2);
+        ax2 /= len; ay2 /= len;
+    }
+    
+    players[1].vx += ax2 * CFG.accel;
+    players[1].vy += ay2 * CFG.accel;
+    
+    // Aplicar física a ambos jugadores
+    players.forEach((p, i) => {
+        // Fricción
+        p.vx *= CFG.friction;
+        p.vy *= CFG.friction;
+        
+        // Limitar velocidad
+        const speed = Math.sqrt(p.vx*p.vx + p.vy*p.vy);
+        if (speed > CFG.maxSpeed) {
+            p.vx = (p.vx / speed) * CFG.maxSpeed;
+            p.vy = (p.vy / speed) * CFG.maxSpeed;
+        }
+        
+        // Mover
+        p.x += p.vx;
+        p.y += p.vy;
+        
+        // ¿Está en la colina?
+        const distToCenter = Math.sqrt(p.x*p.x + p.y*p.y);
+        p.inHill = distToCenter < CFG.hillRadius;
+        
+        // Puntuar si está en la colina
+        if (p.inHill && state.active) {
+            state.scores[p.id] += dt * 10; // 10 pts/seg
+            if (Math.random() < 0.1) spawnParticle(p.x, p.y, p.color);
+        }
+        
+        // Límite de arena (rebote)
+        if (distToCenter > CFG.radius - CFG.playerRadius) {
+            const nx = p.x / distToCenter;
+            const ny = p.y / distToCenter;
+            
+            // Rebote elástico
+            const dot = p.vx * nx + p.vy * ny;
+            p.vx -= 2 * dot * nx * CFG.bounce;
+            p.vy -= 2 * dot * ny * CFG.bounce;
+            
+            // Empujar hacia adentro
+            const overlap = distToCenter - (CFG.radius - CFG.playerRadius);
+            p.x -= nx * overlap;
+            p.y -= ny * overlap;
+            
+            state.shake = 5;
+            Audio.push();
+            spawnParticle(p.x + nx * CFG.playerRadius, p.y + ny * CFG.playerRadius, '#fff', 5);
+        }
+    });
+    
+    // Colisión entre jugadores (empuje)
+    const dx = players[1].x - players[0].x;
+    const dy = players[1].y - players[0].y;
+    const dist = Math.sqrt(dx*dx + dy*dy);
+    const minDist = CFG.playerRadius * 2;
+    
+    if (dist < minDist && dist > 0) {
+        const nx = dx / dist;
+        const ny = dy / dist;
+        
+        // Separar
+        const overlap = (minDist - dist) / 2;
+        players[0].x -= nx * overlap;
+        players[0].y -= ny * overlap;
+        players[1].x += nx * overlap;
+        players[1].y += ny * overlap;
+        
+        // Transferir momento (empuje realista)
+        const relVx = players[1].vx - players[0].vx;
+        const relVy = players[1].vy - players[0].vy;
+        const relDot = relVx * nx + relVy * ny;
+        
+        if (relDot < 0) {
+            const impulse = relDot * 1.2; // Factor de empuje extra
+            players[0].vx += impulse * nx;
+            players[0].vy += impulse * ny;
+            players[1].vx -= impulse * nx;
+            players[1].vy -= impulse * ny;
+            
+            state.shake = 8;
+            Audio.hit();
+            
+            // Partículas de impacto
+            const midX = (players[0].x + players[1].x) / 2;
+            const midY = (players[0].y + players[1].y) / 2;
+            for(let i=0; i<8; i++) spawnParticle(midX, midY, '#fff');
+        }
+    }
+    
+    // Verificar victoria por puntuación
+    if (state.scores.p1 >= CFG.winScore) { endRound('p1'); return; }
+    if (state.scores.p2 >= CFG.winScore) { endRound('p2'); return; }
+    
+    // Partículas
+    state.particles.forEach(p => {
+        p.x += p.vx; p.y += p.vy;
+        p.life -= 0.03;
+        p.vx *= 0.95; p.vy *= 0.95;
+    });
+    state.particles = state.particles.filter(p => p.life > 0);
+    
+    // Shake decay
+    if (state.shake > 0) state.shake *= 0.85;
+    if (state.shake < 0.5) state.shake = 0;
+    
+    updateUI();
+}
+
+function spawnParticle(x, y, color, count = 3) {
+    for(let i=0; i<count; i++) {
+        state.particles.push({
+            x, y,
+            vx: (Math.random()-0.5) * 6,
+            vy: (Math.random()-0.5) * 6,
+            life: 1,
+            color,
+            size: Math.random() * 3 + 1
+        });
+    }
+}
+
+function updateUI() {
+    document.getElementById('scoreP1').innerText = Math.floor(state.scores.p1);
+    document.getElementById('scoreP2').innerText = Math.floor(state.scores.p2);
+    document.getElementById('roundTimer').innerText = Math.ceil(Math.max(0, state.time));
+}
+
+// --- RENDER ---
+
+function draw() {
+    const cx = canvas.width / 2;
+    const cy = canvas.height / 2;
+    
+    // Fondo
+    ctx.fillStyle = '#1a1a2e';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    
+    ctx.save();
+    ctx.translate(cx + (Math.random()-0.5)*state.shake, cy + (Math.random()-0.5)*state.shake);
+    
+    // Arena exterior
+    ctx.fillStyle = '#16213e';
+    ctx.beginPath();
+    ctx.arc(0, 0, CFG.radius, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Borde arena
+    ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+    ctx.lineWidth = 3;
+    ctx.stroke();
+    
+    // Zona de la colina (dorado)
+    const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, CFG.hillRadius);
+    gradient.addColorStop(0, 'rgba(250, 204, 21, 0.3)');
+    gradient.addColorStop(1, 'rgba(250, 204, 21, 0.05)');
+    ctx.fillStyle = gradient;
+    ctx.beginPath();
+    ctx.arc(0, 0, CFG.hillRadius, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Borde colina pulsante
+    const pulse = 0.6 + Math.sin(Date.now() / 300) * 0.2;
+    ctx.strokeStyle = `rgba(250, 204, 21, ${pulse})`;
+    ctx.lineWidth = 2;
+    ctx.setLineDash([8, 8]);
+    ctx.beginPath();
+    ctx.arc(0, 0, CFG.hillRadius, Date.now()/1000, Date.now()/1000 + Math.PI*2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    
+    // Partículas
+    state.particles.forEach(p => {
+        ctx.globalAlpha = p.life;
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        ctx.fill();
+    });
+    ctx.globalAlpha = 1;
+    
+    // Jugadores
+    players.forEach(p => {
+        // Sombra
+        ctx.fillStyle = 'rgba(0,0,0,0.3)';
+        ctx.beginPath();
+        ctx.arc(p.x + 3, p.y + 3, CFG.playerRadius, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Glow si está en la colina
+        if (p.inHill) {
+            ctx.shadowColor = p.color;
+            ctx.shadowBlur = 20;
+        }
+        
+        // Cuerpo
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, CFG.playerRadius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+        
+        // Borde
+        ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        
+        // Indicador de dirección (ojos)
+        const speed = Math.sqrt(p.vx*p.vx + p.vy*p.vy);
+        if (speed > 0.5) {
+            const angle = Math.atan2(p.vy, p.vx);
+            ctx.fillStyle = 'white';
+            ctx.beginPath();
+            ctx.arc(
+                p.x + Math.cos(angle) * 10,
+                p.y + Math.sin(angle) * 10,
+                4, 0, Math.PI * 2
+            );
+            ctx.fill();
+        }
+        
+        // Barra de progreso de puntuación (anillo alrededor)
+        if (p.inHill) {
+            ctx.strokeStyle = '#facc15';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, CFG.playerRadius + 6, -Math.PI/2, -Math.PI/2 + (Date.now() % 1000) / 1000 * Math.PI * 2);
+            ctx.stroke();
+        }
+    });
+    
+    ctx.restore();
+}
+
+// --- GAME LOOP ---
+let lastTime = 0;
+function loop(now) {
+    if (!state.active) return;
+    
+    const dt = Math.min(0.05, (now - lastTime) / 1000);
+    lastTime = now;
+    
+    update(dt);
+    draw();
+    requestAnimationFrame(loop);
+}
+
+// Render inicial
+draw();
+
+</script>
+</body>
+</html>

@@ -1,0 +1,883 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Crossy Road - Cruce Infinito</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            overflow: hidden;
+            background: #87CEEB;
+            font-family: 'Segoe UI', Arial, sans-serif;
+            touch-action: none;
+            user-select: none;
+        }
+        canvas { display: block; }
+
+        #ui {
+            position: absolute; top: 20px; left: 0; right: 0;
+            text-align: center; pointer-events: none; z-index: 10;
+        }
+        #score-display {
+            font-size: 64px; font-weight: 900; color: white;
+            text-shadow: 3px 3px 0 rgba(0,0,0,0.3);
+            line-height: 1;
+        }
+        #best-display {
+            font-size: 16px; color: rgba(255,255,255,0.8);
+            text-shadow: 1px 1px 0 rgba(0,0,0,0.3);
+            margin-top: 5px;
+        }
+
+        #overlay {
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.7);
+            display: flex; justify-content: center; align-items: center;
+            z-index: 100; backdrop-filter: blur(5px);
+        }
+        #overlay.hidden { display: none; }
+
+        .menu-box {
+            background: white; border-radius: 20px; padding: 40px;
+            text-align: center; max-width: 380px; width: 90%;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+        }
+        .menu-box h1 {
+            font-size: 36px; color: #333; margin-bottom: 5px;
+        }
+        .menu-box .subtitle {
+            color: #888; font-size: 14px; margin-bottom: 25px;
+        }
+        .menu-box .final-score {
+            font-size: 56px; font-weight: 900; color: #ff6b35;
+            margin: 10px 0;
+        }
+        .menu-box .label { color: #aaa; font-size: 12px; text-transform: uppercase; letter-spacing: 2px; }
+        .menu-box button {
+            margin-top: 20px; padding: 16px 50px;
+            background: #ff6b35; color: white; border: none;
+            border-radius: 50px; font-size: 20px; font-weight: bold;
+            cursor: pointer; transition: transform 0.2s;
+            box-shadow: 0 4px 15px rgba(255,107,53,0.4);
+        }
+        .menu-box button:hover { transform: scale(1.05); }
+        .menu-box button:active { transform: scale(0.95); }
+
+        .controls-hint {
+            position: absolute; bottom: 30px; left: 0; right: 0;
+            text-align: center; color: rgba(255,255,255,0.6);
+            font-size: 14px; pointer-events: none; z-index: 10;
+        }
+
+        /* Tap zones invisibles para móvil */
+        #tap-zone {
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            z-index: 5;
+        }
+    </style>
+</head>
+<body>
+
+<canvas id="canvas"></canvas>
+
+<div id="ui">
+    <div id="score-display">0</div>
+    <div id="best-display">MEJOR: 0</div>
+</div>
+
+<div class="controls-hint" id="hint">👆 Toca / Flechas para moverte</div>
+
+<div id="tap-zone"></div>
+
+<div id="overlay">
+    <div class="menu-box" id="menu-content">
+        <h1>🐔 CROSSY ROAD</h1>
+        <p class="subtitle">¿Por qué cruzó la carretera?</p>
+        <button onclick="startGame()">JUGAR</button>
+    </div>
+</div>
+
+<script>
+// ===== CONFIGURACIÓN =====
+const TILE = 40;
+const LANES_VISIBLE = 14;
+const COLORS = {
+    grass: ['#4CAF50', '#66BB6A', '#43A047'],
+    road: ['#555', '#666', '#4a4a4a'],
+    water: ['#2196F3', '#42A5F5', '#1E88E5'],
+    rail: ['#795548', '#8D6E63', '#6D4C41'],
+    sky: '#87CEEB',
+    chicken: '#FFD54F',
+    beak: '#FF8F00',
+    comb: '#E53935',
+    shadow: 'rgba(0,0,0,0.15)'
+};
+
+// ===== ESTADO =====
+let canvas, ctx;
+let W, H;
+let game = {
+    running: false,
+    score: 0,
+    best: parseInt(localStorage.getItem('crossyBest')) || 0,
+    lanes: [],
+    player: null,
+    cameraY: 0,
+    targetCameraY: 0,
+    particles: [],
+    time: 0
+};
+
+// ===== CLASES =====
+
+class Player {
+    constructor() {
+        this.gridX = 0;
+        this.gridY = 0;
+        this.x = 0;
+        this.y = 0;
+        this.targetX = 0;
+        this.targetY = 0;
+        this.moving = false;
+        this.moveProgress = 0;
+        this.dead = false;
+        this.facing = 0; // 0=up, 1=right, 2=down, 3=left
+        this.hopHeight = 0;
+        this.squash = 1;
+    }
+
+    move(dx, dy) {
+        if (this.moving || this.dead) return;
+
+        const nx = this.gridX + dx;
+        const ny = this.gridY + dy;
+
+        // Límites laterales
+        if (nx < -4 || nx > 4) return;
+
+        // Determinar dirección
+        if (dy < 0) this.facing = 0;
+        else if (dx > 0) this.facing = 1;
+        else if (dy > 0) this.facing = 2;
+        else if (dx < 0) this.facing = 3;
+
+        this.gridX = nx;
+        this.gridY = ny;
+        this.moving = true;
+        this.moveProgress = 0;
+        this.squash = 0.7;
+
+        // Actualizar score
+        if (dy < 0 && -ny > game.score) {
+            game.score = -ny;
+            updateScore();
+        }
+    }
+
+    update(dt) {
+        if (this.dead) return;
+
+        // Animación de movimiento
+        if (this.moving) {
+            this.moveProgress += dt * 10;
+            if (this.moveProgress >= 1) {
+                this.moveProgress = 1;
+                this.moving = false;
+                this.squash = 1.15;
+            }
+
+            const t = easeOutBack(this.moveProgress);
+            this.x = lerp(this.targetX, this.gridX * TILE, t);
+            this.y = lerp(this.targetY, this.gridY * TILE, t);
+
+            // Hop arc
+            this.hopHeight = Math.sin(this.moveProgress * Math.PI) * 8;
+        } else {
+            this.targetX = this.gridX * TILE;
+            this.targetY = this.gridY * TILE;
+            this.x = this.targetX;
+            this.y = this.targetY;
+            this.hopHeight = 0;
+
+            // Squash recovery
+            this.squash = lerp(this.squash, 1, dt * 8);
+        }
+
+        // Verificar si está en agua sin tronco
+        const lane = getLaneAt(this.gridY);
+        if (lane && lane.type === 'water') {
+            let onLog = false;
+            for (const obj of lane.objects) {
+                if (obj.type === 'log') {
+                    const logLeft = obj.x;
+                    const logRight = obj.x + obj.width * TILE;
+                    const px = this.x + TILE / 2;
+                    if (px > logLeft && px < logRight) {
+                        onLog = true;
+                        // Moverse con el tronco
+                        this.x += obj.speed * dt * 60;
+                        this.gridX = Math.round(this.x / TILE);
+                        this.targetX = this.x;
+                        break;
+                    }
+                }
+            }
+            if (!onLog) die();
+        }
+
+        // Fuera de límites laterales por tronco
+        if (this.x < -5 * TILE || this.x > 5 * TILE) die();
+    }
+
+    draw(ctx, camY) {
+        if (this.dead) return;
+
+        const sx = this.x + W / 2;
+        const sy = this.y - camY + H / 2 + this.hopHeight;
+        const sz = this.squash;
+
+        // Sombra
+        ctx.fillStyle = COLORS.shadow;
+        ctx.beginPath();
+        ctx.ellipse(sx + TILE/2, this.y - camY + H/2 + TILE - 2, 12, 5, 0, 0, Math.PI*2);
+        ctx.fill();
+
+        ctx.save();
+        ctx.translate(sx + TILE/2, sy + TILE/2);
+        ctx.scale(1/sz, sz);
+
+        // Cuerpo
+        ctx.fillStyle = COLORS.chicken;
+        roundRect(ctx, -12, -14, 24, 26, 4);
+        ctx.fill();
+
+        // Alas
+        ctx.fillStyle = '#FFC107';
+        ctx.fillRect(-14, -4, 4, 12);
+        ctx.fillRect(10, -4, 4, 12);
+
+        // Ojos
+        ctx.fillStyle = 'white';
+        ctx.beginPath();
+        ctx.arc(-5, -8, 5, 0, Math.PI*2);
+        ctx.arc(5, -8, 5, 0, Math.PI*2);
+        ctx.fill();
+        ctx.fillStyle = '#333';
+        ctx.beginPath();
+        ctx.arc(-4 + (this.facing===1?2:this.facing===3?-2:0), -8, 2.5, 0, Math.PI*2);
+        ctx.arc(6 + (this.facing===1?2:this.facing===3?-2:0), -8, 2.5, 0, Math.PI*2);
+        ctx.fill();
+
+        // Pico
+        ctx.fillStyle = COLORS.beak;
+        const beakDir = this.facing === 1 ? 6 : this.facing === 3 ? -6 : 0;
+        ctx.beginPath();
+        ctx.moveTo(beakDir - 3, -3);
+        ctx.lineTo(beakDir + 3, -3);
+        ctx.lineTo(beakDir, 2);
+        ctx.fill();
+
+        // Cresta
+        ctx.fillStyle = COLORS.comb;
+        ctx.beginPath();
+        ctx.arc(-3, -16, 3, 0, Math.PI*2);
+        ctx.arc(0, -18, 3, 0, Math.PI*2);
+        ctx.arc(3, -16, 3, 0, Math.PI*2);
+        ctx.fill();
+
+        ctx.restore();
+    }
+}
+
+// ===== GENERACIÓN DE CARRILES =====
+
+function createLane(y) {
+    const absY = Math.abs(y);
+    const difficulty = Math.min(absY / 50, 1);
+
+    // Tipos posibles
+    const types = ['grass', 'road', 'road', 'water', 'rail', 'grass'];
+    // Más probabilidad de peligros cuanto más lejos
+    let type;
+    if (absY < 3) {
+        type = 'grass';
+    } else {
+        type = types[Math.floor(Math.random() * types.length)];
+    }
+
+    const lane = { y, type, objects: [], speed: 0 };
+
+    switch(type) {
+        case 'road': {
+            const dir = Math.random() < 0.5 ? 1 : -1;
+            const speed = (1.5 + Math.random() * 2 + difficulty * 2) * dir;
+            lane.speed = speed;
+            const carCount = 1 + Math.floor(Math.random() * 2);
+            const spacing = 9 / carCount;
+            for (let i = 0; i < carCount; i++) {
+                lane.objects.push({
+                    type: 'car',
+                    x: (i * spacing - 4.5 + Math.random()) * TILE,
+                    width: 1 + (Math.random() < 0.3 ? 1 : 0),
+                    color: ['#E53935','#1E88E5','#8E24AA','#FF6F00','#43A047'][Math.floor(Math.random()*5)],
+                    speed: speed
+                });
+            }
+            break;
+        }
+        case 'water': {
+            const dir = Math.random() < 0.5 ? 1 : -1;
+            const speed = (1 + Math.random() * 1.5 + difficulty) * dir;
+            lane.speed = speed;
+            const logCount = 2 + Math.floor(Math.random() * 2);
+            const spacing = 9 / logCount;
+            for (let i = 0; i < logCount; i++) {
+                lane.objects.push({
+                    type: 'log',
+                    x: (i * spacing - 4.5 + Math.random()) * TILE,
+                    width: 2 + Math.floor(Math.random() * 2),
+                    speed: speed
+                });
+            }
+            break;
+        }
+        case 'rail': {
+            lane.trainTimer = Math.random() * 200;
+            lane.trainInterval = 120 + Math.random() * 180 - difficulty * 80;
+            lane.trainActive = false;
+            lane.trainX = -200;
+            lane.trainSpeed = 8 + difficulty * 4;
+            lane.trainWarning = 0;
+            break;
+        }
+        case 'grass': {
+            // Árboles aleatorios
+            if (absY > 2 && Math.random() < 0.3) {
+                const treeCount = 1 + Math.floor(Math.random() * 3);
+                for (let i = 0; i < treeCount; i++) {
+                    const tx = Math.floor(Math.random() * 9) - 4;
+                    // No bloquear camino del jugador completamente
+                    if (Math.abs(tx) <= 4) {
+                        lane.objects.push({ type: 'tree', x: tx * TILE, gridX: tx });
+                    }
+                }
+            }
+            break;
+        }
+    }
+
+    return lane;
+}
+
+function getLaneAt(gridY) {
+    return game.lanes.find(l => l.y === gridY);
+}
+
+function ensureLanes() {
+    const playerY = game.player.gridY;
+    const minNeeded = playerY - 5;
+    const maxNeeded = playerY - LANES_VISIBLE - 5;
+
+    // Generar carriles adelante
+    while (!game.lanes.some(l => l.y <= maxNeeded)) {
+        const minY = Math.min(...game.lanes.map(l => l.y));
+        game.lanes.push(createLane(minY - 1));
+    }
+
+    // Eliminar carriles muy atrás
+    game.lanes = game.lanes.filter(l => l.y < playerY + 10);
+}
+
+// ===== LÓGICA DEL JUEGO =====
+
+function startGame() {
+    document.getElementById('overlay').classList.add('hidden');
+    document.getElementById('hint').style.display = 'block';
+
+    game.running = true;
+    game.score = 0;
+    game.lanes = [];
+    game.particles = [];
+    game.time = 0;
+
+    // Generar carriles iniciales
+    for (let y = 5; y >= -LANES_VISIBLE - 5; y--) {
+        game.lanes.push(createLane(y));
+    }
+
+    game.player = new Player();
+    game.cameraY = game.player.y;
+    game.targetCameraY = game.cameraY;
+
+    updateScore();
+    requestAnimationFrame(loop);
+}
+
+function die() {
+    if (game.player.dead) return;
+    game.player.dead = true;
+    game.running = false;
+
+    // Partículas de muerte
+    for (let i = 0; i < 20; i++) {
+        game.particles.push({
+            x: game.player.x + W/2 + TILE/2,
+            y: game.player.y - game.cameraY + H/2 + TILE/2,
+            vx: (Math.random() - 0.5) * 8,
+            vy: (Math.random() - 0.5) * 8 - 3,
+            life: 1,
+            color: COLORS.chicken,
+            size: 3 + Math.random() * 4
+        });
+    }
+
+    // Guardar mejor puntuación
+    if (game.score > game.best) {
+        game.best = game.score;
+        localStorage.setItem('crossyBest', game.best);
+    }
+
+    setTimeout(showGameOver, 800);
+}
+
+function showGameOver() {
+    const mc = document.getElementById('menu-content');
+    mc.innerHTML = `
+        <div class="label">PUNTUACIÓN</div>
+        <div class="final-score">${game.score}</div>
+        <div class="label">MEJOR: ${game.best}</div>
+        <button onclick="startGame()">REINTENTAR</button>
+    `;
+    document.getElementById('overlay').classList.remove('hidden');
+}
+
+function updateScore() {
+    document.getElementById('score-display').innerText = game.score;
+    document.getElementById('best-display').innerText = `MEJOR: ${game.best}`;
+}
+
+// ===== UPDATE =====
+
+let lastTime = 0;
+function loop(timestamp) {
+    const dt = Math.min((timestamp - lastTime) / 1000, 0.05);
+    lastTime = timestamp;
+    game.time += dt;
+
+    if (game.running) {
+        game.player.update(dt);
+        ensureLanes();
+
+        // Cámara sigue al jugador suavemente
+        game.targetCameraY = game.player.y + 2 * TILE;
+        game.cameraY = lerp(game.cameraY, game.targetCameraY, dt * 5);
+
+        // Actualizar objetos de carriles
+        game.lanes.forEach(lane => {
+            lane.objects.forEach(obj => {
+                if (obj.speed) {
+                    obj.x += obj.speed * dt * 60;
+                    // Wrap around
+                    const range = 12 * TILE;
+                    if (obj.x > range) obj.x -= range * 2;
+                    if (obj.x < -range) obj.x += range * 2;
+                }
+            });
+
+            // Trenes
+            if (lane.type === 'rail') {
+                lane.trainTimer -= dt * 60;
+                if (lane.trainTimer <= 30 && lane.trainTimer > 0) {
+                    lane.trainWarning = Math.sin(game.time * 20) > 0 ? 1 : 0;
+                }
+                if (lane.trainTimer <= 0 && !lane.trainActive) {
+                    lane.trainActive = true;
+                    lane.trainX = -300;
+                }
+                if (lane.trainActive) {
+                    lane.trainX += lane.trainSpeed * dt * 60;
+                    if (lane.trainX > 500) {
+                        lane.trainActive = false;
+                        lane.trainTimer = lane.trainInterval;
+                        lane.trainWarning = 0;
+                    }
+
+                    // Colisión tren
+                    if (game.player.gridY === lane.y) {
+                        const trainLeft = lane.trainX;
+                        const trainRight = lane.trainX + 8 * TILE;
+                        const px = game.player.x + TILE/2;
+                        if (px > trainLeft && px < trainRight) {
+                            die();
+                        }
+                    }
+                }
+            }
+
+            // Colisión coches
+            if (lane.type === 'road' && game.player.gridY === lane.y) {
+                for (const obj of lane.objects) {
+                    if (obj.type === 'car') {
+                        const carLeft = obj.x;
+                        const carRight = obj.x + obj.width * TILE;
+                        const px = game.player.x + TILE * 0.2;
+                        const pr = game.player.x + TILE * 0.8;
+                        if (pr > carLeft + 4 && px < carRight - 4) {
+                            die();
+                        }
+                    }
+                }
+            }
+        });
+
+        // Colisión con árboles
+        const pLane = getLaneAt(game.player.gridY);
+        if (pLane && pLane.type === 'grass') {
+            for (const obj of pLane.objects) {
+                if (obj.type === 'tree' && obj.gridX === game.player.gridX) {
+                    // Empujar atrás
+                    game.player.gridX -= (game.player.facing === 1 ? 1 : game.player.facing === 3 ? -1 : 0);
+                    game.player.gridY -= (game.player.facing === 0 ? -1 : game.player.facing === 2 ? 1 : 0);
+                    game.player.moving = false;
+                    game.player.x = game.player.gridX * TILE;
+                    game.player.y = game.player.gridY * TILE;
+                    game.player.targetX = game.player.x;
+                    game.player.targetY = game.player.y;
+                    break;
+                }
+            }
+        }
+    }
+
+    // Partículas
+    game.particles.forEach(p => {
+        p.x += p.vx;
+        p.y += p.vy;
+        p.vy += 0.3;
+        p.life -= dt * 2;
+    });
+    game.particles = game.particles.filter(p => p.life > 0);
+
+    draw();
+    requestAnimationFrame(loop);
+}
+
+// ===== RENDERIZADO =====
+
+function draw() {
+    // Cielo
+    ctx.fillStyle = COLORS.sky;
+    ctx.fillRect(0, 0, W, H);
+
+    const camY = game.cameraY;
+
+    // Dibujar carriles
+    const sortedLanes = [...game.lanes].sort((a, b) => b.y - a.y);
+
+    sortedLanes.forEach(lane => {
+        const ly = lane.y * TILE - camY + H / 2;
+        if (ly < -TILE * 2 || ly > H + TILE * 2) return;
+
+        // Fondo del carril
+        let colors;
+        switch(lane.type) {
+            case 'grass': colors = COLORS.grass; break;
+            case 'road': colors = COLORS.road; break;
+            case 'water': colors = COLORS.water; break;
+            case 'rail': colors = COLORS.rail; break;
+        }
+        const ci = Math.abs(lane.y) % colors.length;
+        ctx.fillStyle = colors[ci];
+        ctx.fillRect(0, ly, W, TILE);
+
+        // Detalles del carril
+        if (lane.type === 'road') {
+            // Líneas discontinuas
+            ctx.fillStyle = 'rgba(255,255,255,0.3)';
+            for (let x = 0; x < W; x += 40) {
+                ctx.fillRect(x, ly + TILE/2 - 1, 20, 2);
+            }
+        }
+
+        if (lane.type === 'rail') {
+            // Rieles
+            ctx.fillStyle = '#999';
+            ctx.fillRect(0, ly + 10, W, 3);
+            ctx.fillRect(0, ly + TILE - 13, W, 3);
+            // Traviesas
+            ctx.fillStyle = '#5D4037';
+            for (let x = 0; x < W; x += 25) {
+                ctx.fillRect(x, ly + 8, 8, TILE - 16);
+            }
+            // Advertencia tren
+            if (lane.trainWarning) {
+                ctx.fillStyle = 'rgba(255,0,0,0.3)';
+                ctx.fillRect(0, ly, W, TILE);
+            }
+        }
+
+        if (lane.type === 'water') {
+            // Olas sutiles
+            ctx.fillStyle = 'rgba(255,255,255,0.1)';
+            const waveOff = Math.sin(game.time * 2 + lane.y) * 10;
+            for (let x = 0; x < W; x += 30) {
+                ctx.fillRect(x + waveOff, ly + 15, 15, 2);
+            }
+        }
+
+        // Objetos
+        lane.objects.forEach(obj => {
+            const ox = obj.x + W / 2;
+
+            if (obj.type === 'car') {
+                drawCar(ctx, ox, ly, obj.width * TILE, obj.color, obj.speed > 0);
+            } else if (obj.type === 'log') {
+                drawLog(ctx, ox, ly, obj.width * TILE);
+            } else if (obj.type === 'tree') {
+                drawTree(ctx, ox + W/2 - W/2, ly); // Trees use gridX directly
+                // Fix: trees are positioned by gridX
+                const treeScreenX = obj.x + W/2;
+                drawTree(ctx, treeScreenX, ly);
+            }
+        });
+
+        // Tren
+        if (lane.type === 'rail' && lane.trainActive) {
+            drawTrain(ctx, lane.trainX + W/2, ly);
+        }
+    });
+
+    // Jugador
+    if (game.player) game.player.draw(ctx, camY);
+
+    // Partículas
+    game.particles.forEach(p => {
+        ctx.globalAlpha = p.life;
+        ctx.fillStyle = p.color;
+        ctx.fillRect(p.x - p.size/2, p.y - p.size/2, p.size, p.size);
+    });
+    ctx.globalAlpha = 1;
+
+    // Viñeta sutil
+    const vg = ctx.createRadialGradient(W/2, H/2, H*0.3, W/2, H/2, H*0.8);
+    vg.addColorStop(0, 'transparent');
+    vg.addColorStop(1, 'rgba(0,0,0,0.15)');
+    ctx.fillStyle = vg;
+    ctx.fillRect(0, 0, W, H);
+}
+
+function drawCar(ctx, x, y, w, color, facingRight) {
+    const h = TILE - 8;
+    const cy = y + 4;
+
+    // Sombra
+    ctx.fillStyle = COLORS.shadow;
+    ctx.fillRect(x + 2, cy + h - 2, w - 4, 4);
+
+    // Cuerpo
+    ctx.fillStyle = color;
+    roundRect(ctx, x, cy, w, h, 4);
+    ctx.fill();
+
+    // Techo
+    ctx.fillStyle = shadeColor(color, -20);
+    roundRect(ctx, x + 4, cy + 2, w - 8, h * 0.5, 3);
+    ctx.fill();
+
+    // Ventanas
+    ctx.fillStyle = 'rgba(200,230,255,0.8)';
+    ctx.fillRect(x + 6, cy + 4, w - 12, h * 0.35);
+
+    // Faros
+    ctx.fillStyle = facingRight ? '#FFEB3B' : '#FF5722';
+    const fx = facingRight ? x + w - 3 : x;
+    ctx.fillRect(fx, cy + h - 8, 3, 4);
+}
+
+function drawLog(ctx, x, y, w) {
+    const h = TILE - 10;
+    const cy = y + 5;
+
+    ctx.fillStyle = '#795548';
+    roundRect(ctx, x, cy, w, h, 6);
+    ctx.fill();
+
+    // Textura madera
+    ctx.fillStyle = '#8D6E63';
+    roundRect(ctx, x + 3, cy + 3, w - 6, h - 6, 4);
+    ctx.fill();
+
+    // Anillos
+    ctx.strokeStyle = '#6D4C41';
+    ctx.lineWidth = 1;
+    for (let i = 0; i < w; i += 15) {
+        ctx.beginPath();
+        ctx.arc(x + i + 8, cy + h/2, 4, 0, Math.PI*2);
+        ctx.stroke();
+    }
+}
+
+function drawTree(ctx, x, y) {
+    // Tronco
+    ctx.fillStyle = '#5D4037';
+    ctx.fillRect(x + 14, y + 15, 12, 20);
+
+    // Hojas (3 capas)
+    const greens = ['#2E7D32', '#388E3C', '#43A047'];
+    greens.forEach((c, i) => {
+        ctx.fillStyle = c;
+        const s = 28 - i * 6;
+        const ty = y - 5 - i * 10;
+        ctx.beginPath();
+        ctx.moveTo(x + TILE/2, ty);
+        ctx.lineTo(x + TILE/2 + s/2, ty + s);
+        ctx.lineTo(x + TILE/2 - s/2, ty + s);
+        ctx.closePath();
+        ctx.fill();
+    });
+}
+
+function drawTrain(ctx, x, y) {
+    const w = 8 * TILE;
+    const h = TILE - 4;
+
+    // Sombra
+    ctx.fillStyle = COLORS.shadow;
+    ctx.fillRect(x + 3, y + h, w, 4);
+
+    // Cuerpo principal
+    ctx.fillStyle = '#B71C1C';
+    roundRect(ctx, x, y + 2, w, h, 3);
+    ctx.fill();
+
+    // Franja amarilla
+    ctx.fillStyle = '#FFD600';
+    ctx.fillRect(x, y + h/2 - 2, w, 4);
+
+    // Ventanas
+    ctx.fillStyle = 'rgba(255,255,200,0.7)';
+    for (let i = 0; i < 6; i++) {
+        ctx.fillRect(x + 20 + i * 50, y + 6, 30, 12);
+    }
+
+    // Frente
+    ctx.fillStyle = '#D32F2F';
+    ctx.fillRect(x + w - 10, y + 2, 10, h);
+
+    // Luz frontal
+    ctx.fillStyle = '#FFEB3B';
+    ctx.beginPath();
+    ctx.arc(x + w - 5, y + h/2, 5, 0, Math.PI*2);
+    ctx.fill();
+}
+
+// ===== UTILIDADES =====
+
+function lerp(a, b, t) { return a + (b - a) * t; }
+
+function easeOutBack(t) {
+    const c1 = 1.70158;
+    const c3 = c1 + 1;
+    return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y);
+    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+    ctx.lineTo(x + w, y + h - r);
+    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+    ctx.lineTo(x + r, y + h);
+    ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+    ctx.lineTo(x, y + r);
+    ctx.quadraticCurveTo(x, y, x + r, y);
+    ctx.closePath();
+}
+
+function shadeColor(color, percent) {
+    let num = parseInt(color.replace('#',''), 16);
+    let r = Math.min(255, Math.max(0, (num >> 16) + percent));
+    let g = Math.min(255, Math.max(0, ((num >> 8) & 0x00FF) + percent));
+    let b = Math.min(255, Math.max(0, (num & 0x0000FF) + percent));
+    return '#' + (0x1000000 + r * 0x10000 + g * 0x100 + b).toString(16).slice(1);
+}
+
+// ===== INPUT =====
+
+function handleInput(dx, dy) {
+    if (!game.running) return;
+    game.player.move(dx, dy);
+    document.getElementById('hint').style.display = 'none';
+}
+
+window.addEventListener('keydown', e => {
+    switch(e.code) {
+        case 'ArrowUp': case 'KeyW': handleInput(0, -1); break;
+        case 'ArrowDown': case 'KeyS': handleInput(0, 1); break;
+        case 'ArrowLeft': case 'KeyA': handleInput(-1, 0); break;
+        case 'ArrowRight': case 'KeyD': handleInput(1, 0); break;
+    }
+});
+
+// Touch / Click
+document.getElementById('tap-zone').addEventListener('pointerdown', e => {
+    if (!game.running) return;
+    const cx = window.innerWidth / 2;
+    const cy = window.innerHeight / 2;
+    const dx = e.clientX - cx;
+    const dy = e.clientY - cy;
+
+    if (Math.abs(dx) > Math.abs(dy)) {
+        handleInput(dx > 0 ? 1 : -1, 0);
+    } else {
+        handleInput(0, dy > 0 ? 1 : -1);
+    }
+});
+
+// Swipe support
+let touchStart = null;
+document.getElementById('tap-zone').addEventListener('touchstart', e => {
+    touchStart = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+}, { passive: true });
+
+document.getElementById('tap-zone').addEventListener('touchend', e => {
+    if (!touchStart || !game.running) return;
+    const dx = e.changedTouches[0].clientX - touchStart.x;
+    const dy = e.changedTouches[0].clientY - touchStart.y;
+    const dist = Math.hypot(dx, dy);
+
+    if (dist < 20) {
+        // Tap = forward
+        handleInput(0, -1);
+    } else if (dist > 40) {
+        if (Math.abs(dx) > Math.abs(dy)) {
+            handleInput(dx > 0 ? 1 : -1, 0);
+        } else {
+            handleInput(0, dy > 0 ? 1 : -1);
+        }
+    }
+    touchStart = null;
+}, { passive: true });
+
+// Init
+canvas = document.getElementById('canvas');
+ctx = canvas.getContext('2d');
+
+function resize() {
+    W = window.innerWidth;
+    H = window.innerHeight;
+    canvas.width = W;
+    canvas.height = H;
+}
+window.addEventListener('resize', resize);
+resize();
+
+// Dibujar fondo inicial
+ctx.fillStyle = COLORS.sky;
+ctx.fillRect(0, 0, W, H);
+
+</script>
+</body>
+</html>

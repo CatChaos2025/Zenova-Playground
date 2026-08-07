@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hockey sobre Hielo</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="contenedor">
+        <div class="panel-superior">
+            <div class="score-box azul">
+                <span class="score-label">TÚ</span>
+                <span class="score-value" id="scoreJugador">0</span>
+            </div>
+            <div class="score-box gris">
+                <span class="score-label">TIEMPO</span>
+                <span class="score-value" id="tiempo">60</span>
+            </div>
+            <div class="score-box rojo">
+                <span class="score-label">CPU</span>
+                <span class="score-value" id="scoreCPU">0</span>
+            </div>
+            <div class="score-box oro">
+                <span class="score-label">META</span>
+                <span class="score-value">5</span>
+            </div>
+        </div>
+        
+        <canvas id="gameCanvas" width="600" height="400"></canvas>
+        
+        <div class="controles-info">
+            <span class="key">MOUSE</span> Mover palo
+        </div>
+    </div>
+    
+    <script src="script.js"></script>
+</body>
+</html>

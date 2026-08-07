@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Esgrima Duel</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="game">
+    <h1>🤺 ESGRIMA DUEL</h1>
+    <div class="vidas">
+        <div class="vida-box j">
+            <div>⚔️ TÚ <span id="rondasJ">0</span></div>
+            <div class="vida-bar"><div class="vida-fill j" id="vidaJ" style="width:100%"></div></div>
+            <div class="ki-bar"><div class="ki-fill" id="kiJ" style="width:0%"></div></div>
+            <small>KI</small>
+        </div>
+        <div class="ronda" id="rondaInfo">Ronda 1 / 5</div>
+        <div class="vida-box r">
+            <div>🤖 RIVAL <span id="rondasR">0</span></div>
+            <div class="vida-bar"><div class="vida-fill r" id="vidaR" style="width:100%"></div></div>
+        </div>
+    </div>
+    <div class="arena" id="arena">
+        <div class="floor"></div>
+        <div class="fencer jugador" id="fencerJ">
+            <div class="head"></div>
+            <div class="torso"></div>
+            <div class="legs"></div>
+            <div class="guard"></div>
+            <div class="sword"></div>
+        </div>
+        <div class="fencer rival" id="fencerR">
+            <div class="head"></div>
+            <div class="torso"></div>
+            <div class="legs"></div>
+            <div class="guard"></div>
+            <div class="sword"></div>
+        </div>
+        <div class="overlay" id="overlayInicio">
+            <h2>🤺 ESGRIMA DUEL</h2>
+            <p style="margin-bottom:15px">Ataque alto vence a bajo<br>Ataque bajo vence a defensa<br>Defensa vence a alto<br>¡Estocada cuando tengas KI lleno!</p>
+            <button onclick="iniciarJuego()">¡EN GARDE!</button>
+        </div>
+        <div class="overlay oculto" id="overlayFin">
+            <h2 id="resultadoFinal"></h2>
+            <button onclick="iniciarJuego()">Revancha</button>
+        </div>
+    </div>
+    <div class="acciones" id="acciones">
+        <button class="btn-accion btn-ataque-alto" onclick="accion('alto')">⚔️ Alto<br><small>1</small></button>
+        <button class="btn-accion btn-ataque-bajo" onclick="accion('bajo')">🗡️ Bajo<br><small>2</small></button>
+        <button class="btn-accion btn-defensa" onclick="accion('defensa')">🛡️ Defensa<br><small>3</small></button>
+        <button class="btn-accion btn-estocada" id="btnEstocada" onclick="accion('estocada')" disabled>💥 Estocada<br><small>4</small></button>
+    </div>
+    <div class="info" id="info">Elige tu acción</div>
+</div>
+<script src="script.js"></script>
+</body>
+</html>

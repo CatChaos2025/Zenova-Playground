@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pac-Man JS</title>
+    <style>
+        :root { --bg: #111; --wall: #1919A6; --dot: #ffb8ae; }
+        body {
+            background: var(--bg);
+            color: white;
+            font-family: 'Courier New', monospace;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+            overflow: hidden;
+        }
+        h1 { margin: 5px 0; font-size: 24px; text-transform: uppercase; letter-spacing: 3px; }
+        #ui { display: flex; gap: 30px; margin-bottom: 10px; font-size: 18px; font-weight: bold; }
+        canvas {
+            border: 3px solid var(--wall);
+            border-radius: 4px;
+            box-shadow: 0 0 20px rgba(25, 25, 166, 0.4);
+            image-rendering: pixelated;
+        }
+        #msg {
+            position: absolute;
+            background: rgba(0,0,0,0.85);
+            padding: 20px 40px;
+            border: 2px solid white;
+            text-align: center;
+            display: none;
+            z-index: 10;
+        }
+        #msg button {
+            margin-top: 15px;
+            padding: 10px 25px;
+            font-family: inherit;
+            font-size: 16px;
+            cursor: pointer;
+            background: var(--wall);
+            color: white;
+            border: none;
+        }
+        .controls-hint { margin-top: 8px; font-size: 12px; opacity: 0.6; }
+    </style>
+</head>
+<body>
+    <h1>Pac-Man</h1>
+    <div id="ui">
+        <span>SCORE: <span id="score">0</span></span>
+        <span>LIVES: <span id="lives">3</span></span>
+    </div>
+    <canvas id="game"></canvas>
+    <div class="controls-hint">Flechas / WASD para moverte</div>
+
+    <div id="msg">
+        <h2 id="msg-title">GAME OVER</h2>
+        <p id="msg-sub">Score: 0</p>
+        <button onclick="resetGame()">JUGAR DE NUEVO</button>
+    </div>
+
+<script>
+/**
+ * PAC-MAN CLONE
+ * Mapa: W=Muro, .=Punto, o=PowerPellet, P=Pacman, G=Fantasma, -=PuertaFantasma
+ */
+const TILE = 20;
+const SPEED = 2; // Píxeles por frame (debe ser divisor de TILE)
+const GHOST_SPEED = 2;
+
+// 1=W, 0=., 2=o, 3=P, 4=G, 5=-
+const RAW_MAP = [
+    "WWWWWWWWWWWWWWWWWWW",
+    "W........W........W",
+    "W.WW.WWW.W.WWW.WW.W",
+    "WoWW.WWW.W.WWW.WWoW",
+    "W.................W",
+    "W.WW.W.WWWWW.W.WW.W",
+    "W....W...W...W....W",
+    "WWWW.WWW-W-WWW.WWWW",
+    "....-.W..G..W-....",
+    "WWWW.W.WWWWW.W.WWWW",
+    "....W...W...W.....",
+    "WWWW.W.WWWWW.W.WWWW",
+    "W.................W",
+    "W.WW.WWW.W.WWW.WW.W",
+    "W..W.....P.....W..W",
+    "WW.W.W.WWWWW.W.W.WW",
+    "W....W...W...W....W",
+    "WWWWWWWWWWWWWWWWWWW"
+];
+
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+const scoreEl = document.getElementById('score');
+const livesEl = document.getElementById('lives');
+const msgEl = document.getElementById('msg');
+
+let map = [];
+let pacman, ghosts;
+let score = 0, lives = 3;
+let animId;
+let gameRunning = false;
+let totalDots = 0;
+
+// Direcciones
+const DIR = { 
+    UP: {x:0,y:-1}, DOWN: {x:0,y:1}, 
+    LEFT: {x:-1,y:0}, RIGHT: {x:1,y:0}, NONE: {x:0,y:0} 
+};
+
+class Entity {
+    constructor(x, y, speed) {
+        this.x = x; this.y = y;
+        this.speed = speed;
+        this.dir = DIR.NONE;
+        this.nextDir = DIR.NONE;
+        this.radius = TILE * 0.4;
+    }
+
+    getTile() {
+        return { 
+            c: Math.round(this.x / TILE), 
+            r: Math.round(this.y / TILE) 
+        };
+    }
+
+    isCentered() {
+        return this.x % TILE === 0 && this.y % TILE === 0;
+    }
+
+    canMove(dir) {
+        const t = this.getTile();
+        const nc = t.c + dir.x;
+        const nr = t.r + dir.y;
+        if (nr < 0 || nr >= map.length || nc < 0 || nc >= map[0].length) return false;
+        const cell = map[nr][nc];
+        return cell !== 1 && cell !== 5; // 5 es puerta fantasma (solo ellos pasan)
+    }
+
+    move() {
+        if (this.isCentered()) {
+            // Intentar cambiar a la dirección deseada
+            if (this.nextDir !== DIR.NONE && this.canMove(this.nextDir)) {
+                this.dir = this.nextDir;
+                this.nextDir = DIR.NONE;
+            }
+            // Si no puede seguir en su dirección actual, parar
+            if (!this.canMove(this.dir)) {
+                this.dir = DIR.NONE;
+            }
+        }
+        this.x += this.dir.x * this.speed;
+        this.y += this.dir.y * this.speed;
+        
+        // Wrap horizontal (túnel)
+        if (this.x < -TILE/2) this.x = canvas.width + TILE/2;
+        if (this.x > canvas.width + TILE/2) this.x = -TILE/2;
+    }
+}
+
+class Ghost extends Entity {
+    constructor(x, y, color) {
+        super(x, y, GHOST_SPEED);
+        this.color = color;
+        this.dir = [DIR.LEFT, DIR.RIGHT][Math.floor(Math.random()*2)];
+    }
+
+    update() {
+        if (this.isCentered()) {
+            const opts = [DIR.UP, DIR.DOWN, DIR.LEFT, DIR.RIGHT]
+                .filter(d => d.x !== -this.dir.x || d.y !== -this.dir.y) // No volver atrás inmediatamente
+                .filter(d => this.canMoveGhost(d));
+            
+            if (opts.length > 0) {
+                // IA simple: elegir dirección aleatoria válida
+                this.dir = opts[Math.floor(Math.random() * opts.length)];
+            } else {
+                // Callejón sin salida: dar vuelta
+                this.dir = {x: -this.dir.x, y: -this.dir.y};
+            }
+        }
+        this.x += this.dir.x * this.speed;
+        this.y += this.dir.y * this.speed;
+    }
+
+    canMoveGhost(dir) {
+        const t = this.getTile();
+        const nc = t.c + dir.x, nr = t.r + dir.y;
+        if (nr < 0 || nr >= map.length || nc < 0 || nc >= map[0].length) return false;
+        return map[nr][nc] !== 1; // Los fantasmas ignoran puertas
+    }
+
+    draw() {
+        ctx.fillStyle = this.color;
+        ctx.beginPath();
+        ctx.arc(this.x + TILE/2, this.y + TILE/2, this.radius, 0, Math.PI*2);
+        ctx.fill();
+        // Ojos
+        ctx.fillStyle = 'white';
+        ctx.beginPath();
+        ctx.arc(this.x + TILE/2 - 3, this.y + TILE/2 - 2, 3, 0, Math.PI*2);
+        ctx.arc(this.x + TILE/2 + 3, this.y + TILE/2 - 2, 3, 0, Math.PI*2);
+        ctx.fill();
+        ctx.fillStyle = 'blue';
+        ctx.beginPath();
+        ctx.arc(this.x + TILE/2 - 3 + this.dir.x*2, this.y + TILE/2 - 2 + this.dir.y*2, 1.5, 0, Math.PI*2);
+        ctx.arc(this.x + TILE/2 + 3 + this.dir.x*2, this.y + TILE/2 - 2 + this.dir.y*2, 1.5, 0, Math.PI*2);
+        ctx.fill();
+    }
+}
+
+function parseMap() {
+    map = [];
+    ghosts = [];
+    totalDots = 0;
+    const colors = ['#FF0000','#FFB8FF','#00FFFF','#FFB852'];
+    let gi = 0;
+
+    for (let r = 0; r < RAW_MAP.length; r++) {
+        const row = [];
+        for (let c = 0; c < RAW_MAP[r].length; c++) {
+            const ch = RAW_MAP[r][c];
+            if (ch === 'W') row.push(1);
+            else if (ch === '.') { row.push(0); totalDots++; }
+            else if (ch === 'o') { row.push(2); totalDots++; }
+            else if (ch === 'P') { 
+                row.push(0); 
+                pacman = new Entity(c * TILE, r * TILE, SPEED); 
+            }
+            else if (ch === 'G') { 
+                row.push(0);
+                ghosts.push(new Ghost(c * TILE, r * TILE, colors[gi++ % colors.length]));
+            }
+            else if (ch === '-') row.push(5);
+            else row.push(0);
+        }
+        map.push(row);
+    }
+    canvas.width = map[0].length * TILE;
+    canvas.height = map.length * TILE;
+}
+
+function drawMap() {
+    for (let r = 0; r < map.length; r++) {
+        for (let c = 0; c < map[r].length; c++) {
+            const x = c * TILE, y = r * TILE;
+            if (map[r][c] === 1) {
+                ctx.fillStyle = '#1919A6';
+                ctx.fillRect(x+1, y+1, TILE-2, TILE-2);
+            } else if (map[r][c] === 0) {
+                ctx.fillStyle = '#ffb8ae';
+                ctx.fillRect(x + TILE/2 - 2, y + TILE/2 - 2, 4, 4);
+            } else if (map[r][c] === 2) {
+                ctx.fillStyle = '#ffb8ae';
+                ctx.beginPath();
+                ctx.arc(x + TILE/2, y + TILE/2, 6, 0, Math.PI*2);
+                ctx.fill();
+            } else if (map[r][c] === 5) {
+                ctx.fillStyle = '#FFB8FF';
+                ctx.fillRect(x, y + TILE/2 - 1, TILE, 2);
+            }
+        }
+    }
+}
+
+function drawPacman() {
+    const cx = pacman.x + TILE/2, cy = pacman.y + TILE/2;
+    const angle = pacman.dir === DIR.RIGHT ? 0 :
+                 pacman.dir === DIR.DOWN ? Math.PI/2 :
+                 pacman.dir === DIR.LEFT ? Math.PI :
+                 pacman.dir === DIR.UP ? -Math.PI/2 : 0;
+    
+    // Animación boca
+    const mouth = (Date.now() % 200 < 100) ? 0.25 : 0.05;
+
+    ctx.fillStyle = '#FFFF00';
+    ctx.beginPath();
+    ctx.arc(cx, cy, pacman.radius, angle + mouth * Math.PI, angle + (2 - mouth) * Math.PI);
+    ctx.lineTo(cx, cy);
+    ctx.fill();
+}
+
+function checkCollisions() {
+    const t = pacman.getTile();
+    
+    // Comer puntos
+    if (map[t.r][t.c] === 0) {
+        map[t.r][t.c] = -1; // vacío
+        score += 10;
+        totalDots--;
+    } else if (map[t.r][t.c] === 2) {
+        map[t.r][t.c] = -1;
+        score += 50;
+        totalDots--;
+    }
+    scoreEl.textContent = score;
+
+    if (totalDots <= 0) endGame(true);
+
+    // Colisión con fantasmas
+    for (const g of ghosts) {
+        const dx = (pacman.x + TILE/2) - (g.x + TILE/2);
+        const dy = (pacman.y + TILE/2) - (g.y + TILE/2);
+        if (Math.sqrt(dx*dx + dy*dy) < TILE * 0.7) {
+            handleDeath();
+            return;
+        }
+    }
+}
+
+function handleDeath() {
+    lives--;
+    livesEl.textContent = lives;
+    if (lives <= 0) {
+        endGame(false);
+    } else {
+        // Resetear posiciones
+        gameRunning = false;
+        setTimeout(() => {
+            parseMap(); // Recarga mapa pero mantiene score/lives
+            // Restaurar score visual ya que parseMap resetea dots
+            scoreEl.textContent = score;
+            livesEl.textContent = lives;
+            gameRunning = true;
+            loop();
+        }, 1000);
+    }
+}
+
+function endGame(win) {
+    gameRunning = false;
+    cancelAnimationFrame(animId);
+    document.getElementById('msg-title').textContent = win ? '¡GANASTE!' : 'GAME OVER';
+    document.getElementById('msg-title').style.color = win ? '#0f0' : '#f00';
+    document.getElementById('msg-sub').textContent = `Score Final: ${score}`;
+    msgEl.style.display = 'block';
+}
+
+function loop() {
+    if (!gameRunning) return;
+    
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    drawMap();
+    
+    pacman.move();
+    drawPacman();
+    
+    ghosts.forEach(g => { g.update(); g.draw(); });
+    
+    checkCollisions();
+    
+    animId = requestAnimationFrame(loop);
+}
+
+// Input
+document.addEventListener('keydown', e => {
+    if (!gameRunning) return;
+    switch(e.key) {
+        case 'ArrowUp': case 'w': case 'W': pacman.nextDir = DIR.UP; break;
+        case 'ArrowDown': case 's': case 'S': pacman.nextDir = DIR.DOWN; break;
+        case 'ArrowLeft': case 'a': case 'A': pacman.nextDir = DIR.LEFT; break;
+        case 'ArrowRight': case 'd': case 'D': pacman.nextDir = DIR.RIGHT; break;
+    }
+});
+
+function resetGame() {
+    score = 0; lives = 3;
+    scoreEl.textContent = 0;
+    livesEl.textContent = 3;
+    msgEl.style.display = 'none';
+    parseMap();
+    gameRunning = true;
+    loop();
+}
+
+// Iniciar
+parseMap();
+gameRunning = true;
+loop();
+</script>
+</body>
+</html>

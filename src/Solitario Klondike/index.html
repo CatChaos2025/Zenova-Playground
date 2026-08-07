@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Solitario Premium</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    
+    <!-- ESTILOS CSS INTEGRADOS -->
+    <style>
+        :root {
+            --card-w: 90px;
+            --card-h: 126px;
+            --radius: 10px;
+            --felt: #1b5e20;
+            --felt-light: #2e7d32;
+            --shadow-sm: 0 2px 4px rgba(0,0,0,0.2);
+            --shadow-md: 0 4px 12px rgba(0,0,0,0.3);
+            --shadow-lg: 0 12px 30px rgba(0,0,0,0.4);
+            --white: #fafafa;
+            --red: #c62828;
+            --black: #212121;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; -webkit-user-select: none; }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: radial-gradient(circle at center, var(--felt-light), var(--felt));
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            overflow: hidden;
+        }
+
+        #app {
+            width: 100%;
+            max-width: 800px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 10px;
+        }
+
+        header {
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 5px 20px;
+            color: rgba(255,255,255,0.9);
+        }
+
+        h1 { font-size: 1.4rem; font-weight: 700; letter-spacing: -0.5px; }
+        .badge { background: rgba(0,0,0,0.3); padding: 4px 12px; border-radius: 20px; font-size: 0.8rem; margin-left: 10px; }
+        .header-right { display: flex; gap: 8px; }
+
+        .btn-primary, .btn-secondary {
+            padding: 8px 18px; border: none; border-radius: 8px; font-weight: 600; font-size: 0.85rem; cursor: pointer; transition: all 0.2s ease;
+        }
+        .btn-primary { background: var(--white); color: var(--felt); }
+        .btn-primary:hover { transform: translateY(-1px); box-shadow: var(--shadow-md); }
+        .btn-secondary { background: rgba(255,255,255,0.15); color: white; backdrop-filter: blur(4px); }
+        .btn-secondary:hover { background: rgba(255,255,255,0.25); }
+
+        #game-board { display: flex; flex-direction: column; gap: 20px; }
+        .top-row, .tableau-row { display: grid; grid-template-columns: repeat(7, var(--card-w)); gap: 12px; }
+        .spacer { grid-column: span 1; }
+
+        .pile {
+            width: var(--card-w); height: var(--card-h); border: 2px solid rgba(255,255,255,0.12);
+            border-radius: var(--radius); position: relative; background: rgba(0,0,0,0.08);
+        }
+        .pile-label {
+            position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+            font-size: 32px; color: rgba(255,255,255,0.15); pointer-events: none;
+        }
+        #stock .pile-label { font-size: 28px; opacity: 0.3; }
+
+        .card {
+            width: var(--card-w); height: var(--card-h); background: var(--white); border-radius: var(--radius);
+            position: absolute; top: 0; left: 0; box-shadow: var(--shadow-sm); display: flex; flex-direction: column;
+            justify-content: space-between; padding: 6px 8px; font-weight: 700; cursor: grab; transition: box-shadow 0.15s ease;
+        }
+        .card:hover { box-shadow: var(--shadow-md); }
+        .card.red { color: var(--red); }
+        .card.black { color: var(--black); }
+
+        .card-top, .card-bottom { display: flex; flex-direction: column; align-items: center; line-height: 1; font-size: 16px; }
+        .card-bottom { transform: rotate(180deg); }
+        .card-center { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 38px; opacity: 0.9; }
+
+        .card-back {
+            background: repeating-linear-gradient(45deg, transparent, transparent 5px, rgba(255,255,255,0.05) 5px, rgba(255,255,255,0.05) 10px), linear-gradient(135deg, #1565c0, #0d47a1);
+            border: 3px solid white; cursor: default;
+        }
+        .card-back * { display: none !important; }
+
+        .card.dragging { z-index: 9999 !important; cursor: grabbing; pointer-events: none; box-shadow: var(--shadow-lg); transform: scale(1.05); transition: transform 0.1s ease; }
+
+        #win-modal { position: fixed; inset: 0; background: rgba(0,0,0,0.7); backdrop-filter: blur(8px); display: flex; align-items: center; justify-content: center; z-index: 10000; animation: fadeIn 0.3s ease; }
+        #win-modal.hidden { display: none; }
+        .modal-content { background: white; padding: 50px 40px; border-radius: 20px; text-align: center; box-shadow: var(--shadow-lg); animation: popIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+        .trophy { font-size: 60px; margin-bottom: 15px; }
+        .modal-content h2 { font-size: 2rem; color: var(--felt); margin-bottom: 8px; }
+        .modal-content p { color: #666; margin-bottom: 25px; font-size: 1.1rem; }
+
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes popIn { from { transform: scale(0.8); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+        @media (max-width: 700px) {
+            :root { --card-w: 48px; --card-h: 67px; }
+            .card-top, .card-bottom { font-size: 11px; }
+            .card-center { font-size: 20px; }
+            .pile-label { font-size: 20px; }
+            header h1 { font-size: 1.1rem; }
+            .btn-primary, .btn-secondary { padding: 6px 12px; font-size: 0.75rem; }
+        }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <header>
+            <div class="header-left">
+                <h1>♠ Solitario</h1>
+                <span id="moves-counter" class="badge">0 movimientos</span>
+            </div>
+            <div class="header-right">
+                <button id="btn-undo" class="btn-secondary" title="Deshacer">↩ Deshacer</button>
+                <button id="btn-new-game" class="btn-primary">Nueva Partida</button>
+            </div>
+        </header>
+
+        <main id="game-board">
+            <div class="top-row">
+                <div id="stock" class="pile"><div class="pile-label">↻</div></div>
+                <div id="waste" class="pile"></div>
+                <div class="spacer"></div>
+                <div id="foundation-0" class="pile foundation" data-suit="hearts"><div class="pile-label">♥</div></div>
+                <div id="foundation-1" class="pile foundation" data-suit="diamonds"><div class="pile-label">♦</div></div>
+                <div id="foundation-2" class="pile foundation" data-suit="clubs"><div class="pile-label">♣</div></div>
+                <div id="foundation-3" class="pile foundation" data-suit="spades"><div class="pile-label">♠</div></div>
+            </div>
+
+            <div class="tableau-row">
+                <div id="tableau-0" class="pile tableau-pile"></div>
+                <div id="tableau-1" class="pile tableau-pile"></div>
+                <div id="tableau-2" class="pile tableau-pile"></div>
+                <div id="tableau-3" class="pile tableau-pile"></div>
+                <div id="tableau-4" class="pile tableau-pile"></div>
+                <div id="tableau-5" class="pile tableau-pile"></div>
+                <div id="tableau-6" class="pile tableau-pile"></div>
+            </div>
+        </main>
+
+        <div id="win-modal" class="hidden">
+            <div class="modal-content">
+                <div class="trophy">🏆</div>
+                <h2>¡Victoria!</h2>
+                <p id="win-stats"></p>
+                <button id="btn-play-again" class="btn-primary">Jugar otra vez</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- LÓGICA JAVASCRIPT INTEGRADA -->
+    <script>
+        const SUITS = ['hearts', 'diamonds', 'clubs', 'spades'];
+        const SYMBOLS = { hearts: '♥', diamonds: '♦', clubs: '♣', spades: '♠' };
+        const VALUES = ['A','2','3','4','5','6','7','8','9','10','J','Q','K'];
+
+        let deck = [], moves = 0, history = [];
+        let draggedCard = null, dragSourcePile = null, dragOffsetX = 0, dragOffsetY = 0;
+
+        const movesEl = document.getElementById('moves-counter');
+        const winModal = document.getElementById('win-modal');
+        const winStats = document.getElementById('win-stats');
+
+        function initGame() {
+            createDeck(); shuffle(deck); moves = 0; history = []; updateUI();
+            winModal.classList.add('hidden'); clearBoard(); dealCards(); saveState();
+        }
+
+        function createDeck() {
+            deck = [];
+            for (const suit of SUITS) {
+                for (let i = 0; i < VALUES.length; i++) {
+                    deck.push({ id: `${suit}-${i}`, suit, value: VALUES[i], rank: i + 1, color: (suit === 'hearts' || suit === 'diamonds') ? 'red' : 'black', faceUp: false });
+                }
+            }
+        }
+
+        function shuffle(arr) { for (let i = arr.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [arr[i], arr[j]] = [arr[j], arr[i]]; } }
+
+        function clearBoard() {
+            document.querySelectorAll('.pile').forEach(p => { const label = p.querySelector('.pile-label'); p.innerHTML = ''; if (label) p.appendChild(label); });
+        }
+
+        function dealCards() {
+            let idx = 0;
+            for (let col = 0; col < 7; col++) {
+                for (let row = 0; row <= col; row++) {
+                    const card = deck[idx++]; if (row === col) card.faceUp = true; renderCard(card, `tableau-${col}`, row * 28);
+                }
+            }
+            while (idx < 52) renderCard(deck[idx++], 'stock');
+            document.getElementById('stock').onclick = drawFromStock;
+        }
+
+        function renderCard(data, pileId, topOffset = 0) {
+            const el = document.createElement('div');
+            el.className = `card ${data.faceUp ? data.color : 'card-back'}`; el.dataset.id = data.id;
+            if (data.faceUp) {
+                el.innerHTML = `<div class="card-top">${data.value}<span>${SYMBOLS[data.suit]}</span></div><div class="card-center">${SYMBOLS[data.suit]}</div><div class="card-bottom">${data.value}<span>${SYMBOLS[data.suit]}</span></div>`;
+                el.addEventListener('mousedown', onDragStart);
+            }
+            if (topOffset) el.style.top = `${topOffset}px`;
+            document.getElementById(pileId).appendChild(el);
+        }
+
+        function drawFromStock(e) {
+            if (draggedCard) return; saveState();
+            const stock = document.getElementById('stock'), waste = document.getElementById('waste'), cards = stock.querySelectorAll('.card');
+            if (cards.length > 0) {
+                const el = stock.lastElementChild, data = getCardData(el.dataset.id); data.faceUp = true; stock.removeChild(el); renderCard(data, 'waste');
+            } else {
+                Array.from(waste.querySelectorAll('.card')).reverse().forEach(c => { const d = getCardData(c.dataset.id); d.faceUp = false; waste.removeChild(c); renderCard(d, 'stock'); });
+            }
+            incrementMoves();
+        }
+
+        function onDragStart(e) {
+            if (e.button !== 0) return;
+            const el = e.currentTarget, pile = el.parentElement;
+            if ((pile.id.startsWith('waste') || pile.id.startsWith('foundation')) && el !== pile.lastElementChild) return;
+            saveState(); draggedCard = el; dragSourcePile = pile;
+            const rect = el.getBoundingClientRect(); dragOffsetX = e.clientX - rect.left; dragOffsetY = e.clientY - rect.top;
+            el.classList.add('dragging'); Object.assign(el.style, { position: 'fixed', width: rect.width + 'px', height: rect.height + 'px', left: rect.left + 'px', top: rect.top + 'px' });
+            document.addEventListener('mousemove', onDragMove); document.addEventListener('mouseup', onDragEnd); e.preventDefault();
+        }
+
+        function onDragMove(e) { if (!draggedCard) return; draggedCard.style.left = `${e.clientX - dragOffsetX}px`; draggedCard.style.top = `${e.clientY - dragOffsetY}px`; }
+
+        function onDragEnd(e) {
+            if (!draggedCard) return;
+            document.removeEventListener('mousemove', onDragMove); document.removeEventListener('mouseup', onDragEnd);
+            draggedCard.classList.remove('dragging'); Object.assign(draggedCard.style, { position: 'absolute', width: '', height: '', left: '', top: '' });
+            const target = document.elementFromPoint(e.clientX, e.clientY)?.closest('.pile');
+            let valid = false;
+            if (target && target !== dragSourcePile) {
+                const data = getCardData(draggedCard.dataset.id);
+                valid = target.classList.contains('foundation') ? isValidFoundation(data, target) : target.classList.contains('tableau-pile') ? isValidTableau(data, target) : false;
+            }
+            if (valid) {
+                draggedCard.style.top = target.classList.contains('tableau-pile') ? `${target.querySelectorAll('.card').length * 28}px` : '0px';
+                target.appendChild(draggedCard); flipTopCard(dragSourcePile); incrementMoves(); checkWin();
+            } else {
+                if (dragSourcePile.classList.contains('tableau-pile')) { const cards = Array.from(dragSourcePile.querySelectorAll('.card')); draggedCard.style.top = `${cards.indexOf(draggedCard) * 28}px`; }
+                history.pop();
+            }
+            draggedCard = null; dragSourcePile = null;
+        }
+
+        function isValidFoundation(card, pile) {
+            if (card.suit !== pile.dataset.suit) return false;
+            const top = pile.lastElementChild?.classList.contains('card') ? pile.lastElementChild : null;
+            return !top ? card.rank === 1 : card.rank === getCardData(top.dataset.id).rank + 1;
+        }
+
+        function isValidTableau(card, pile) {
+            const top = pile.lastElementChild?.classList.contains('card') ? pile.lastElementChild : null;
+            if (!top) return card.rank === 13;
+            const t = getCardData(top.dataset.id); return card.color !== t.color && card.rank === t.rank - 1;
+        }
+
+        function getCardData(id) { return deck.find(c => c.id === id); }
+
+        function flipTopCard(pile) {
+            if (!pile.classList.contains('tableau-pile')) return;
+            const prev = pile.lastElementChild;
+            if (prev?.classList.contains('card-back')) {
+                const data = getCardData(prev.dataset.id); data.faceUp = true; const oldTop = prev.style.top; pile.removeChild(prev); renderCard(data, pile.id); pile.lastElementChild.style.top = oldTop;
+            }
+        }
+
+        function incrementMoves() { moves++; updateUI(); }
+        function updateUI() { movesEl.textContent = `${moves} movimiento${moves !== 1 ? 's' : ''}`; }
+
+        function checkWin() {
+            if (document.querySelectorAll('.foundation .card').length === 52) { winStats.textContent = `Completado en ${moves} movimientos`; winModal.classList.remove('hidden'); }
+        }
+
+        function saveState() {
+            const state = { moves, piles: {} };
+            document.querySelectorAll('.pile').forEach(p => { state.piles[p.id] = Array.from(p.querySelectorAll('.card')).map(c => ({ id: c.dataset.id, top: c.style.top || '0px' })); });
+            history.push(JSON.stringify(state)); if (history.length > 50) history.shift();
+        }
+
+        function undo() {
+            if (history.length <= 1) return; history.pop(); const prev = JSON.parse(history[history.length - 1]);
+            moves = prev.moves; updateUI(); clearBoard();
+            for (const [pileId, cards] of Object.entries(prev.piles)) { cards.forEach(({ id, top }) => { renderCard(getCardData(id), pileId, parseInt(top) || 0); }); }
+            document.getElementById('stock').onclick = drawFromStock;
+        }
+
+        document.getElementById('btn-new-game').addEventListener('click', initGame);
+        document.getElementById('btn-play-again').addEventListener('click', initGame);
+        document.getElementById('btn-undo').addEventListener('click', undo);
+        initGame();
+    </script>
+</body>
+</html>

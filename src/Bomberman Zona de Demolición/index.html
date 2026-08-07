@@ -1,0 +1,962 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bomberman: Zona de Demolición</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, #1a1a2e, #16213e);
+            font-family: 'Segoe UI', Arial, sans-serif;
+            overflow: hidden;
+        }
+        
+        h1 {
+            color: white;
+            font-size: 32px;
+            margin-bottom: 10px;
+            text-shadow: 0 0 15px rgba(255,165,0,0.5);
+        }
+        
+        #hud {
+            display: flex;
+            gap: 25px;
+            margin-bottom: 15px;
+            color: white;
+        }
+        .hud-item {
+            text-align: center;
+            background: rgba(255,255,255,0.1);
+            padding: 8px 18px;
+            border-radius: 8px;
+        }
+        .hud-value { font-size: 20px; font-weight: bold; color: #ffd93d; }
+        .hud-label { font-size: 10px; opacity: 0.6; text-transform: uppercase; }
+        
+        #game-container {
+            position: relative;
+            border: 3px solid #444;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 0 40px rgba(0,0,0,0.5);
+        }
+        
+        canvas { display: block; }
+        
+        #status-bar {
+            margin-top: 12px;
+            color: rgba(255,255,255,0.7);
+            font-size: 14px;
+            text-align: center;
+        }
+        
+        #controls-info {
+            margin-top: 10px;
+            color: rgba(255,255,255,0.4);
+            font-size: 12px;
+            text-align: center;
+        }
+        
+        /* Overlay */
+        #overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.9);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+        }
+        #overlay.hidden { display: none; }
+        
+        .overlay-box {
+            background: #1a1a2e;
+            border: 2px solid #ff8c00;
+            border-radius: 15px;
+            padding: 40px;
+            text-align: center;
+            color: white;
+            max-width: 420px;
+            width: 90%;
+        }
+        .overlay-box h2 { color: #ff8c00; font-size: 28px; margin-bottom: 15px; }
+        .overlay-box p { color: #aaa; margin-bottom: 15px; line-height: 1.6; }
+        .overlay-box .controls {
+            text-align: left;
+            background: rgba(255,255,255,0.05);
+            padding: 15px;
+            border-radius: 8px;
+            margin: 15px 0;
+            font-size: 14px;
+            line-height: 2;
+        }
+        .overlay-box .controls span { color: #ffd93d; font-weight: bold; }
+        .overlay-box button {
+            padding: 14px 40px;
+            background: #ff8c00;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 18px;
+            cursor: pointer;
+            font-weight: bold;
+            margin-top: 10px;
+        }
+        .overlay-box button:hover { background: #e67e00; }
+        
+        /* Level complete toast */
+        #toast {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0,0,0,0.9);
+            color: #51cf66;
+            padding: 20px 40px;
+            border-radius: 10px;
+            font-size: 24px;
+            font-weight: bold;
+            opacity: 0;
+            transition: opacity 0.3s;
+            z-index: 50;
+            pointer-events: none;
+        }
+        #toast.visible { opacity: 1; }
+    </style>
+</head>
+<body>
+
+<h1>💣 BOMBERMAN</h1>
+
+<div id="hud">
+    <div class="hud-item">
+        <div class="hud-value" id="hud-level">1</div>
+        <div class="hud-label">Nivel</div>
+    </div>
+    <div class="hud-item">
+        <div class="hud-value" id="hud-bombs">1</div>
+        <div class="hud-label">💣 Bombas</div>
+    </div>
+    <div class="hud-item">
+        <div class="hud-value" id="hud-power">1</div>
+        <div class="hud-label">🔥 Poder</div>
+    </div>
+    <div class="hud-item">
+        <div class="hud-value" id="hud-enemies">0</div>
+        <div class="hud-label">👾 Enemigos</div>
+    </div>
+    <div class="hud-item">
+        <div class="hud-value" id="hud-score">0</div>
+        <div class="hud-label">⭐ Puntos</div>
+    </div>
+</div>
+
+<div id="game-container">
+    <canvas id="canvas"></canvas>
+</div>
+
+<div id="status-bar">Encuentra la 🚪 puerta y elimina todos los enemigos</div>
+<div id="controls-info">WASD/Flechas: Mover | ESPACIO: Bomba</div>
+
+<div id="toast"></div>
+
+<div id="overlay">
+    <div class="overlay-box">
+        <h2 id="ov-title">💣 BOMBERMAN</h2>
+        <p id="ov-text">Destruye bloques, elimina enemigos y encuentra la salida.</p>
+        <div class="controls" id="ov-controls">
+            <span>WASD / Flechas</span> - Mover<br>
+            <span>ESPACIO</span> - Poner bomba<br>
+            <span>💣 Bomba</span> - Explota en cruz (+)<br>
+            <span>🧱 Bloques</span> - Ocultan power-ups<br>
+            <span>🚪 Puerta</span> - Oculta bajo un bloque
+        </div>
+        <button id="ov-btn" onclick="startGame()">🎮 JUGAR</button>
+    </div>
+</div>
+
+<script>
+// ===== CONFIGURACIÓN =====
+const TILE = 40;
+const COLS = 15;
+const ROWS = 13;
+const WIDTH = COLS * TILE;
+const HEIGHT = ROWS * TILE;
+
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+canvas.width = WIDTH;
+canvas.height = HEIGHT;
+
+// Tipos de tiles
+const EMPTY = 0;
+const WALL = 1;      // Indestructible
+const BLOCK = 2;     // Destructible
+const BOMB = 3;
+const EXIT = 4;      // Puerta (oculta bajo bloque)
+
+// ===== ESTADO DEL JUEGO =====
+let game = {
+    running: false,
+    level: 1,
+    score: 0,
+    grid: [],
+    bombs: [],
+    explosions: [],
+    enemies: [],
+    powerups: [],
+    exitPos: null,
+    exitRevealed: false,
+    enemiesAlive: 0
+};
+
+let player = {
+    x: 1, y: 1,       // Posición en grid
+    px: TILE, py: TILE, // Posición en pixels (para movimiento suave)
+    speed: 2,
+    maxBombs: 1,
+    activeBombs: 0,
+    power: 1,         // Radio de explosión
+    alive: true,
+    moving: false,
+    targetX: 1,
+    targetY: 1
+};
+
+let keys = {};
+let lastTime = 0;
+
+// ===== GENERACIÓN DE NIVEL =====
+
+function generateLevel(level) {
+    game.grid = [];
+    game.bombs = [];
+    game.explosions = [];
+    game.enemies = [];
+    game.powerups = [];
+    game.exitRevealed = false;
+    
+    // Crear grid
+    for (let y = 0; y < ROWS; y++) {
+        game.grid[y] = [];
+        for (let x = 0; x < COLS; x++) {
+            // Bordes
+            if (y === 0 || y === ROWS-1 || x === 0 || x === COLS-1) {
+                game.grid[y][x] = WALL;
+            }
+            // Paredes fijas (patrón)
+            else if (y % 2 === 0 && x % 2 === 0) {
+                game.grid[y][x] = WALL;
+            }
+            // Zona segura del jugador
+            else if ((x === 1 && y === 1) || (x === 2 && y === 1) || (x === 1 && y === 2)) {
+                game.grid[y][x] = EMPTY;
+            }
+            // Bloques destructibles aleatorios
+            else if (Math.random() < 0.65) {
+                game.grid[y][x] = BLOCK;
+            }
+            else {
+                game.grid[y][x] = EMPTY;
+            }
+        }
+    }
+    
+    // Colocar salida (en una esquina lejana)
+    const exitPositions = [
+        {x: COLS-2, y: ROWS-2},
+        {x: COLS-2, y: 1},
+        {x: 1, y: ROWS-2}
+    ];
+    const exitChoice = exitPositions[Math.floor(Math.random() * exitPositions.length)];
+    game.exitPos = exitChoice;
+    game.grid[exitChoice.y][exitChoice.x] = BLOCK; // Oculta bajo bloque
+    
+    // Colocar enemigos
+    const enemyCount = 3 + level;
+    for (let i = 0; i < enemyCount; i++) {
+        let ex, ey;
+        let valid = false;
+        
+        while (!valid) {
+            ex = 1 + Math.floor(Math.random() * (COLS - 2));
+            ey = 1 + Math.floor(Math.random() * (ROWS - 2));
+            
+            // No poner cerca del jugador
+            const dist = Math.abs(ex - 1) + Math.abs(ey - 1);
+            if (dist > 4 && game.grid[ey][ex] === EMPTY) {
+                valid = true;
+            }
+        }
+        
+        game.enemies.push({
+            x: ex, y: ey,
+            px: ex * TILE, py: ey * TILE,
+            dir: Math.floor(Math.random() * 4),
+            speed: 1 + level * 0.15,
+            moveTimer: 0,
+            moveInterval: 40 - level * 2,
+            alive: true,
+            type: Math.random() < 0.3 ? 'fast' : 'normal'
+        });
+    }
+    
+    game.enemiesAlive = enemyCount;
+    
+    // Reset player
+    player.x = 1;
+    player.y = 1;
+    player.px = TILE;
+    player.py = TILE;
+    player.targetX = 1;
+    player.targetY = 1;
+    player.alive = true;
+    player.activeBombs = 0;
+    
+    updateHUD();
+}
+
+// ===== BOMBAS Y EXPLOSIONES =====
+
+function placeBomb() {
+    if (!game.running || !player.alive) return;
+    if (player.activeBombs >= player.maxBombs) return;
+    if (game.grid[player.y][player.x] !== EMPTY) return;
+    
+    game.grid[player.y][player.x] = BOMB;
+    player.activeBombs++;
+    
+    game.bombs.push({
+        x: player.x,
+        y: player.y,
+        timer: 150, // ~2.5 segundos
+        power: player.power,
+        pulse: 0
+    });
+}
+
+function explodeBomb(bomb) {
+    game.grid[bomb.y][bomb.x] = EMPTY;
+    player.activeBombs--;
+    
+    // Crear explosión en cruz
+    const directions = [
+        {dx: 0, dy: 0},  // Centro
+        {dx: 1, dy: 0},  // Derecha
+        {dx: -1, dy: 0}, // Izquierda
+        {dx: 0, dy: 1},  // Abajo
+        {dx: 0, dy: -1}  // Arriba
+    ];
+    
+    directions.forEach(dir => {
+        for (let i = 0; i <= bomb.power; i++) {
+            const ex = bomb.x + dir.dx * i;
+            const ey = bomb.y + dir.dy * i;
+            
+            // Fuera de límites
+            if (ex < 0 || ex >= COLS || ey < 0 || ey >= ROWS) break;
+            
+            // Pared indestructible
+            if (game.grid[ey][ex] === WALL) break;
+            
+            // Bloque destructible
+            if (game.grid[ey][ex] === BLOCK) {
+                game.grid[ey][ex] = EMPTY;
+                game.score += 10;
+                
+                // Chance de power-up
+                spawnPowerup(ex, ey);
+                
+                // Verificar si era la salida
+                if (game.exitPos && ex === game.exitPos.x && ey === game.exitPos.y) {
+                    game.exitRevealed = true;
+                    game.grid[ey][ex] = EXIT;
+                }
+                
+                game.explosions.push({x: ex, y: ey, timer: 30});
+                break; // La explosión se detiene al destruir un bloque
+            }
+            
+            // Otra bomba (reacción en cadena)
+            if (game.grid[ey][ex] === BOMB) {
+                const otherBomb = game.bombs.find(b => b.x === ex && b.y === ey);
+                if (otherBomb) {
+                    otherBomb.timer = 1; // Explota inmediatamente
+                }
+            }
+            
+            game.explosions.push({x: ex, y: ey, timer: 30});
+            
+            // Si es el centro, no continuar en la misma dirección
+            if (dir.dx === 0 && dir.dy === 0) break;
+        }
+    });
+    
+    // Efecto visual
+    game.score += 5;
+    updateHUD();
+}
+
+function spawnPowerup(x, y) {
+    if (Math.random() < 0.3) {
+        const types = ['bomb', 'power', 'speed'];
+        const type = types[Math.floor(Math.random() * types.length)];
+        game.powerups.push({x, y, type, visible: true});
+    }
+}
+
+// ===== ENEMIGOS =====
+
+function updateEnemies() {
+    game.enemies.forEach(enemy => {
+        if (!enemy.alive) return;
+        
+        enemy.moveTimer++;
+        
+        if (enemy.moveTimer >= enemy.moveInterval) {
+            enemy.moveTimer = 0;
+            
+            // Intentar mover en dirección actual
+            const dirs = [{dx:0,dy:-1},{dx:1,dy:0},{dx:0,dy:1},{dx:-1,dy:0}];
+            const dir = dirs[enemy.dir];
+            
+            const nx = enemy.x + dir.dx;
+            const ny = enemy.y + dir.dy;
+            
+            if (nx >= 0 && nx < COLS && ny >= 0 && ny < ROWS && 
+                (game.grid[ny][nx] === EMPTY || game.grid[ny][nx] === EXIT)) {
+                enemy.x = nx;
+                enemy.y = ny;
+            } else {
+                // Cambiar dirección aleatoriamente
+                enemy.dir = Math.floor(Math.random() * 4);
+            }
+        }
+        
+        // Mover suavemente hacia posición target
+        const targetPx = enemy.x * TILE;
+        const targetPy = enemy.y * TILE;
+        
+        const speed = enemy.type === 'fast' ? enemy.speed * 1.5 : enemy.speed;
+        
+        if (enemy.px < targetPx) enemy.px = Math.min(enemy.px + speed, targetPx);
+        if (enemy.px > targetPx) enemy.px = Math.max(enemy.px - speed, targetPx);
+        if (enemy.py < targetPy) enemy.py = Math.min(enemy.py + speed, targetPy);
+        if (enemy.py > targetPy) enemy.py = Math.max(enemy.py - speed, targetPy);
+        
+        // Colisión con jugador
+        if (player.alive) {
+            const dist = Math.hypot(enemy.px - player.px, enemy.py - player.py);
+            if (dist < TILE * 0.7) {
+                killPlayer();
+            }
+        }
+        
+        // Colisión con explosiones
+        game.explosions.forEach(exp => {
+            if (enemy.x === exp.x && enemy.y === exp.y) {
+                enemy.alive = false;
+                game.enemiesAlive--;
+                game.score += 50;
+                updateHUD();
+            }
+        });
+    });
+}
+
+// ===== JUGADOR =====
+
+function updatePlayer() {
+    if (!player.alive) return;
+    
+    // Movimiento suave hacia el tile objetivo
+    const targetPx = player.targetX * TILE;
+    const targetPy = player.targetY * TILE;
+    
+    const dx = targetPx - player.px;
+    const dy = targetPy - player.py;
+    const dist = Math.hypot(dx, dy);
+    
+    if (dist > 1) {
+        player.px += (dx / dist) * player.speed;
+        player.py += (dy / dist) * player.speed;
+        player.moving = true;
+    } else {
+        player.px = targetPx;
+        player.py = targetPy;
+        player.x = player.targetX;
+        player.y = player.targetY;
+        player.moving = false;
+        
+        // Recoger power-ups
+        checkPowerups();
+        
+        // Verificar salida
+        if (game.exitRevealed && player.x === game.exitPos.x && player.y === game.exitPos.y) {
+            levelComplete();
+        }
+    }
+    
+    // Input de movimiento
+    if (!player.moving) {
+        let nx = player.x, ny = player.y;
+        
+        if (keys['ArrowUp'] || keys['KeyW']) ny--;
+        else if (keys['ArrowDown'] || keys['KeyS']) ny++;
+        else if (keys['ArrowLeft'] || keys['KeyA']) nx--;
+        else if (keys['ArrowRight'] || keys['KeyD']) nx++;
+        
+        if ((nx !== player.x || ny !== player.y) && canMove(nx, ny)) {
+            player.targetX = nx;
+            player.targetY = ny;
+        }
+    }
+    
+    // Verificar colisión con explosiones
+    game.explosions.forEach(exp => {
+        if (player.x === exp.x && player.y === exp.y) {
+            killPlayer();
+        }
+    });
+}
+
+function canMove(x, y) {
+    if (x < 0 || x >= COLS || y < 0 || y >= ROWS) return false;
+    const tile = game.grid[y][x];
+    return tile === EMPTY || tile === EXIT;
+}
+
+function checkPowerups() {
+    for (let i = game.powerups.length - 1; i >= 0; i--) {
+        const p = game.powerups[i];
+        if (p.x === player.x && p.y === player.y) {
+            switch(p.type) {
+                case 'bomb':
+                    player.maxBombs++;
+                    showToast('💣 +1 Bomba');
+                    break;
+                case 'power':
+                    player.power++;
+                    showToast('🔥 +1 Poder');
+                    break;
+                case 'speed':
+                    player.speed += 0.5;
+                    showToast('⚡ +Velocidad');
+                    break;
+            }
+            game.score += 25;
+            game.powerups.splice(i, 1);
+            updateHUD();
+        }
+    }
+}
+
+function killPlayer() {
+    if (!player.alive) return;
+    player.alive = false;
+    
+    setTimeout(() => {
+        gameOver();
+    }, 1000);
+}
+
+// ===== NIVELES =====
+
+function levelComplete() {
+    game.running = false;
+    game.score += 100 * game.level;
+    showToast(`🎉 ¡NIVEL ${game.level} COMPLETADO!`);
+    
+    setTimeout(() => {
+        game.level++;
+        generateLevel(game.level);
+        game.running = true;
+    }, 2000);
+}
+
+function gameOver() {
+    game.running = false;
+    
+    document.getElementById('ov-title').innerText = '💀 GAME OVER';
+    document.getElementById('ov-text').innerText = `Puntuación: ${game.score} | Nivel: ${game.level}`;
+    document.getElementById('ov-controls').innerHTML = `
+        <span>⭐ Puntos:</span> ${game.score}<br>
+        <span>📍 Nivel:</span> ${game.level}<br>
+        <span>💣 Bombas máximas:</span> ${player.maxBombs}<br>
+        <span>🔥 Poder final:</span> ${player.power}
+    `;
+    document.getElementById('ov-btn').innerText = '🔄 REINTENTAR';
+    document.getElementById('overlay').classList.remove('hidden');
+}
+
+function startGame() {
+    document.getElementById('overlay').classList.add('hidden');
+    
+    game.level = 1;
+    game.score = 0;
+    player.maxBombs = 1;
+    player.power = 1;
+    player.speed = 2;
+    
+    generateLevel(1);
+    game.running = true;
+    gameLoop();
+}
+
+// ===== RENDERIZADO =====
+
+function draw() {
+    // Fondo
+    ctx.fillStyle = '#2c3e50';
+    ctx.fillRect(0, 0, WIDTH, HEIGHT);
+    
+    // Grid
+    for (let y = 0; y < ROWS; y++) {
+        for (let x = 0; x < COLS; x++) {
+            const tile = game.grid[y][x];
+            const px = x * TILE;
+            const py = y * TILE;
+            
+            switch(tile) {
+                case WALL:
+                    // Pared indestructible
+                    ctx.fillStyle = '#34495e';
+                    ctx.fillRect(px, py, TILE, TILE);
+                    ctx.fillStyle = '#2c3e50';
+                    ctx.fillRect(px + 2, py + 2, TILE - 4, TILE - 4);
+                    // Textura
+                    ctx.strokeStyle = '#3d566e';
+                    ctx.lineWidth = 1;
+                    ctx.strokeRect(px + 5, py + 5, TILE - 10, TILE - 10);
+                    break;
+                    
+                case BLOCK:
+                    // Bloque destructible
+                    ctx.fillStyle = '#8b4513';
+                    ctx.fillRect(px, py, TILE, TILE);
+                    ctx.fillStyle = '#a0522d';
+                    ctx.fillRect(px + 2, py + 2, TILE - 4, TILE - 4);
+                    // Grietas
+                    ctx.strokeStyle = '#654321';
+                    ctx.lineWidth = 1;
+                    ctx.beginPath();
+                    ctx.moveTo(px + TILE/3, py);
+                    ctx.lineTo(px + TILE/3, py + TILE);
+                    ctx.moveTo(px + TILE*2/3, py);
+                    ctx.lineTo(px + TILE*2/3, py + TILE);
+                    ctx.moveTo(px, py + TILE/2);
+                    ctx.lineTo(px + TILE, py + TILE/2);
+                    ctx.stroke();
+                    break;
+                    
+                case EXIT:
+                    // Puerta
+                    ctx.fillStyle = '#1a1a2e';
+                    ctx.fillRect(px, py, TILE, TILE);
+                    ctx.fillStyle = '#27ae60';
+                    ctx.fillRect(px + 5, py + 3, TILE - 10, TILE - 3);
+                    ctx.fillStyle = '#2ecc71';
+                    ctx.fillRect(px + 8, py + 6, TILE - 16, TILE - 9);
+                    // Brillo
+                    ctx.shadowColor = '#2ecc71';
+                    ctx.shadowBlur = 10;
+                    ctx.strokeStyle = '#2ecc71';
+                    ctx.lineWidth = 2;
+                    ctx.strokeRect(px + 5, py + 3, TILE - 10, TILE - 3);
+                    ctx.shadowBlur = 0;
+                    break;
+                    
+                default:
+                    // Suelo
+                    ctx.fillStyle = (x + y) % 2 === 0 ? '#3d5c3a' : '#35523a';
+                    ctx.fillRect(px, py, TILE, TILE);
+            }
+        }
+    }
+    
+    // Power-ups
+    game.powerups.forEach(p => {
+        const px = p.x * TILE + TILE/2;
+        const py = p.y * TILE + TILE/2;
+        
+        ctx.font = '20px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        
+        let icon = '';
+        switch(p.type) {
+            case 'bomb': icon = '💣'; break;
+            case 'power': icon = '🔥'; break;
+            case 'speed': icon = '⚡'; break;
+        }
+        ctx.fillText(icon, px, py);
+    });
+    
+    // Bombas
+    game.bombs.forEach(bomb => {
+        const px = bomb.x * TILE + TILE/2;
+        const py = bomb.y * TILE + TILE/2;
+        
+        // Pulso
+        bomb.pulse += 0.15;
+        const scale = 1 + Math.sin(bomb.pulse) * 0.1;
+        const radius = 12 * scale;
+        
+        // Cuerpo bomba
+        ctx.fillStyle = '#1a1a1a';
+        ctx.beginPath();
+        ctx.arc(px, py, radius, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Brillo
+        ctx.fillStyle = '#444';
+        ctx.beginPath();
+        ctx.arc(px - 3, py - 3, 4, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Mecha
+        ctx.strokeStyle = '#8b4513';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(px, py - radius);
+        ctx.quadraticCurveTo(px + 5, py - radius - 8, px + 3, py - radius - 12);
+        ctx.stroke();
+        
+        // Chispa
+        if (bomb.timer < 60) {
+            ctx.fillStyle = `rgba(255, ${150 + Math.random() * 100}, 0, ${Math.random()})`;
+            ctx.beginPath();
+            ctx.arc(px + 3, py - radius - 12, 3 + Math.random() * 3, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        
+        // Timer visual (rojo si está por explotar)
+        if (bomb.timer < 50) {
+            ctx.strokeStyle = `rgba(255, 0, 0, ${Math.sin(bomb.pulse * 2) * 0.5 + 0.5})`;
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(px, py, radius + 5, 0, Math.PI * 2);
+            ctx.stroke();
+        }
+    });
+    
+    // Explosiones
+    game.explosions.forEach(exp => {
+        const px = exp.x * TILE;
+        const py = exp.y * TILE;
+        const alpha = exp.timer / 30;
+        
+        // Fuego
+        const gradient = ctx.createRadialGradient(
+            px + TILE/2, py + TILE/2, 0,
+            px + TILE/2, py + TILE/2, TILE/2
+        );
+        gradient.addColorStop(0, `rgba(255, 255, 200, ${alpha})`);
+        gradient.addColorStop(0.4, `rgba(255, 165, 0, ${alpha})`);
+        gradient.addColorStop(1, `rgba(255, 69, 0, ${alpha * 0.5})`);
+        
+        ctx.fillStyle = gradient;
+        ctx.fillRect(px, py, TILE, TILE);
+        
+        // Borde brillante
+        ctx.strokeStyle = `rgba(255, 200, 0, ${alpha * 0.5})`;
+        ctx.lineWidth = 2;
+        ctx.strokeRect(px + 2, py + 2, TILE - 4, TILE - 4);
+    });
+    
+    // Enemigos
+    game.enemies.forEach(enemy => {
+        if (!enemy.alive) return;
+        
+        const px = enemy.px + TILE/2;
+        const py = enemy.py + TILE/2;
+        
+        // Cuerpo
+        ctx.fillStyle = enemy.type === 'fast' ? '#9b59b6' : '#e74c3c';
+        ctx.beginPath();
+        ctx.arc(px, py, 14, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Ojos
+        ctx.fillStyle = 'white';
+        ctx.beginPath();
+        ctx.arc(px - 5, py - 3, 4, 0, Math.PI * 2);
+        ctx.arc(px + 5, py - 3, 4, 0, Math.PI * 2);
+        ctx.fill();
+        
+        ctx.fillStyle = '#333';
+        ctx.beginPath();
+        ctx.arc(px - 5, py - 3, 2, 0, Math.PI * 2);
+        ctx.arc(px + 5, py - 3, 2, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Boca
+        ctx.strokeStyle = '#333';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(px, py + 4, 5, 0, Math.PI);
+        ctx.stroke();
+    });
+    
+    // Jugador
+    if (player.alive) {
+        const px = player.px + TILE/2;
+        const py = player.py + TILE/2;
+        
+        // Sombra
+        ctx.fillStyle = 'rgba(0,0,0,0.3)';
+        ctx.beginPath();
+        ctx.ellipse(px, py + 14, 10, 5, 0, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Cuerpo
+        ctx.fillStyle = '#3498db';
+        ctx.beginPath();
+        ctx.arc(px, py, 14, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Casco
+        ctx.fillStyle = '#2980b9';
+        ctx.beginPath();
+        ctx.arc(px, py - 5, 12, Math.PI, 0);
+        ctx.fill();
+        
+        // Cara
+        ctx.fillStyle = '#fdbf60';
+        ctx.beginPath();
+        ctx.arc(px, py + 2, 8, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Ojos
+        ctx.fillStyle = '#333';
+        ctx.beginPath();
+        ctx.arc(px - 3, py, 2, 0, Math.PI * 2);
+        ctx.arc(px + 3, py, 2, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Sonrisa
+        ctx.strokeStyle = '#333';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.arc(px, py + 3, 4, 0.1, Math.PI - 0.1);
+        ctx.stroke();
+    }
+}
+
+// ===== UI =====
+
+function updateHUD() {
+    document.getElementById('hud-level').innerText = game.level;
+    document.getElementById('hud-bombs').innerText = player.maxBombs;
+    document.getElementById('hud-power').innerText = player.power;
+    document.getElementById('hud-enemies').innerText = game.enemiesAlive;
+    document.getElementById('hud-score').innerText = game.score;
+}
+
+function showToast(text) {
+    const toast = document.getElementById('toast');
+    toast.innerText = text;
+    toast.classList.add('visible');
+    setTimeout(() => toast.classList.remove('visible'), 1500);
+}
+
+// ===== GAME LOOP =====
+
+function gameLoop(timestamp) {
+    if (!game.running) return;
+    
+    // Update bombs
+    for (let i = game.bombs.length - 1; i >= 0; i--) {
+        game.bombs[i].timer--;
+        if (game.bombs[i].timer <= 0) {
+            explodeBomb(game.bombs[i]);
+            game.bombs.splice(i, 1);
+        }
+    }
+    
+    // Update explosions
+    for (let i = game.explosions.length - 1; i >= 0; i--) {
+        game.explosions[i].timer--;
+        if (game.explosions[i].timer <= 0) {
+            game.explosions.splice(i, 1);
+        }
+    }
+    
+    updatePlayer();
+    updateEnemies();
+    draw();
+    
+    requestAnimationFrame(gameLoop);
+}
+
+// ===== INPUT =====
+
+window.addEventListener('keydown', (e) => {
+    keys[e.code] = true;
+    
+    if (e.code === 'Space') {
+        e.preventDefault();
+        placeBomb();
+    }
+});
+
+window.addEventListener('keyup', (e) => {
+    keys[e.code] = false;
+});
+
+// Touch controls para móvil
+let touchStartX = 0, touchStartY = 0;
+
+canvas.addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    const touch = e.touches[0];
+    touchStartX = touch.clientX;
+    touchStartY = touch.clientY;
+    
+    // Tap corto = bomba
+    setTimeout(() => {
+        if (!keys['touchMove']) {
+            placeBomb();
+        }
+    }, 200);
+});
+
+canvas.addEventListener('touchmove', (e) => {
+    e.preventDefault();
+    const touch = e.touches[0];
+    const dx = touch.clientX - touchStartX;
+    const dy = touch.clientY - touchStartY;
+    
+    keys['touchMove'] = true;
+    
+    if (Math.abs(dx) > Math.abs(dy)) {
+        if (dx > 20) { keys['ArrowRight'] = true; keys['ArrowLeft'] = false; }
+        else if (dx < -20) { keys['ArrowLeft'] = true; keys['ArrowRight'] = false; }
+    } else {
+        if (dy > 20) { keys['ArrowDown'] = true; keys['ArrowUp'] = false; }
+        else if (dy < -20) { keys['ArrowUp'] = true; keys['ArrowDown'] = false; }
+    }
+});
+
+canvas.addEventListener('touchend', (e) => {
+    e.preventDefault();
+    keys['ArrowUp'] = false;
+    keys['ArrowDown'] = false;
+    keys['ArrowLeft'] = false;
+    keys['ArrowRight'] = false;
+    keys['touchMove'] = false;
+});
+
+// Inicializar
+generateLevel(1);
+draw();
+
+</script>
+</body>
+</html>

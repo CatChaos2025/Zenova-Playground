@@ -1,0 +1,4 @@
+body { background: #0d47a1; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; font-family: sans-serif; color: white; }
+.contenedor { text-align: center; }
+canvas { border: 4px solid #fff; background: #1565c0; border-radius: 10px; cursor: none; }
+h1 { color: #fff; margin-bottom: 10px; }

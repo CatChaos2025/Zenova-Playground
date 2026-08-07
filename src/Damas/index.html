@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Damas - Estrategia vs IA (Corregido)</title>
+    <style>
+        :root {
+            --bg-color: #2c3e50;
+            --board-light: #f0d9b5;
+            --board-dark: #b58863;
+            --piece-red: #c0392b;
+            --piece-black: #2c3e50;
+            --highlight: rgba(100, 255, 100, 0.5);
+            --capture-highlight: rgba(255, 50, 50, 0.6);
+            --selected: #f1c40f;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: white;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+        }
+
+        h1 { margin-bottom: 10px; color: #ecf0f1; }
+
+        .status-bar {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 15px;
+            font-size: 1.2rem;
+            background: rgba(0,0,0,0.3);
+            padding: 10px 20px;
+            border-radius: 8px;
+        }
+
+        .status-item { display: flex; align-items: center; gap: 8px; opacity: 0.5; transition: 0.3s; }
+        .status-item.active { opacity: 1; transform: scale(1.1); }
+        .dot { width: 15px; height: 15px; border-radius: 50%; }
+        .dot.red { background-color: var(--piece-red); }
+        .dot.black { background-color: var(--piece-black); border: 1px solid #fff; }
+
+        #status-text { margin-bottom: 15px; font-size: 1.1rem; color: #bdc3c7; height: 1.5em; }
+
+        .board {
+            display: grid;
+            grid-template-columns: repeat(8, 50px);
+            grid-template-rows: repeat(8, 50px);
+            border: 5px solid #5d4037;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.5);
+            user-select: none;
+        }
+
+        .cell {
+            width: 50px;
+            height: 50px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+        }
+
+        .cell.light { background-color: var(--board-light); }
+        .cell.dark { background-color: var(--board-dark); cursor: pointer; }
+
+        .cell.valid-move::after {
+            content: '';
+            width: 15px;
+            height: 15px;
+            background-color: var(--highlight);
+            border-radius: 50%;
+            position: absolute;
+            z-index: 1;
+        }
+
+        .cell.valid-capture {
+            box-shadow: inset 0 0 0 4px var(--capture-highlight);
+        }
+
+        .piece {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            position: relative;
+            z-index: 2;
+            box-shadow: 2px 2px 5px rgba(0,0,0,0.4);
+            transition: transform 0.2s ease;
+            cursor: pointer;
+        }
+
+        .piece.red { background: radial-gradient(circle at 30% 30%, #e74c3c, var(--piece-red)); border: 2px solid #922b21; }
+        .piece.black { background: radial-gradient(circle at 30% 30%, #555, var(--piece-black)); border: 2px solid #000; }
+
+        .piece.king::after {
+            content: '♛';
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            color: gold;
+            font-size: 24px;
+            text-shadow: 1px 1px 2px black;
+        }
+
+        .piece.selected {
+            box-shadow: 0 0 0 4px var(--selected);
+            transform: scale(1.1);
+        }
+
+        .controls { margin-top: 20px; }
+        button {
+            padding: 10px 20px;
+            font-size: 1rem;
+            background-color: #27ae60;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        button:hover { background-color: #2ecc71; }
+
+        .modal {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.85);
+            display: flex; justify-content: center; align-items: center;
+            opacity: 0; pointer-events: none; transition: opacity 0.3s;
+            z-index: 100;
+        }
+        .modal.show { opacity: 1; pointer-events: all; }
+        .modal-content {
+            background: var(--bg-color); padding: 40px; border-radius: 10px;
+            text-align: center; border: 2px solid #f1c40f;
+        }
+        .modal h2 { font-size: 2.5rem; margin-bottom: 20px; }
+
+        @media (max-width: 500px) {
+            .board { grid-template-columns: repeat(8, 40px); grid-template-rows: repeat(8, 40px); }
+            .cell { width: 40px; height: 40px; }
+            .piece { width: 32px; height: 32px; }
+            .piece.king::after { font-size: 18px; }
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Damas (Checkers)</h1>
+
+    <div class="status-bar">
+        <div class="status-item active" id="status-player">
+            <span class="dot red"></span> Tú (Rojas)
+        </div>
+        <div class="status-item" id="status-ai">
+            <span class="dot black"></span> IA (Negras)
+        </div>
+    </div>
+
+    <div id="status-text">Tu turno: Selecciona una ficha</div>
+
+    <div class="board" id="board"></div>
+
+    <div class="controls">
+        <button onclick="game.init()">Reiniciar Juego</button>
+    </div>
+
+    <div id="modal" class="modal">
+        <div class="modal-content">
+            <h2 id="winner-text">¡Victoria!</h2>
+            <p id="winner-msg"></p>
+            <button onclick="game.init(); document.getElementById('modal').classList.remove('show')">Jugar de Nuevo</button>
+        </div>
+    </div>
+
+<script>
+class CheckersGame {
+    constructor() {
+        this.boardSize = 8;
+        this.board = [];
+        this.currentPlayer = 1; // 1: Humano, 2: IA
+        this.selectedPiece = null;
+        this.gameOver = false;
+        
+        this.boardEl = document.getElementById('board');
+        this.statusText = document.getElementById('status-text');
+        
+        this.weights = { piece: 100, king: 150 };
+
+        this.init();
+    }
+
+    init() {
+        this.createBoard();
+        this.currentPlayer = 1;
+        this.gameOver = false;
+        this.selectedPiece = null;
+        document.getElementById('modal').classList.remove('show');
+        this.updateStatus();
+        this.render();
+    }
+
+    createBoard() {
+        this.board = Array(this.boardSize).fill().map(() => Array(this.boardSize).fill(0));
+        for (let r = 0; r < 3; r++) {
+            for (let c = 0; c < 8; c++) {
+                if ((r + c) % 2 === 1) this.board[r][c] = 2;
+            }
+        }
+        for (let r = 5; r < 8; r++) {
+            for (let c = 0; c < 8; c++) {
+                if ((r + c) % 2 === 1) this.board[r][c] = 1;
+            }
+        }
+    }
+
+    render() {
+        this.boardEl.innerHTML = '';
+        const moves = this.selectedPiece ? this.getMovesForPiece(this.selectedPiece.r, this.selectedPiece.c, this.board) : [];
+
+        for (let r = 0; r < this.boardSize; r++) {
+            for (let c = 0; c < this.boardSize; c++) {
+                const cell = document.createElement('div');
+                cell.classList.add('cell');
+                cell.classList.add((r + c) % 2 === 0 ? 'light' : 'dark');
+                
+                const pieceVal = this.board[r][c];
+                if (pieceVal !== 0) {
+                    const piece = document.createElement('div');
+                    piece.classList.add('piece');
+                    piece.classList.add(pieceVal === 1 || pieceVal === 3 ? 'red' : 'black');
+                    if (pieceVal === 3 || pieceVal === 4) piece.classList.add('king');
+                    
+                    if (this.selectedPiece && this.selectedPiece.r === r && this.selectedPiece.c === c) {
+                        piece.classList.add('selected');
+                    }
+                    
+                    piece.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        this.handleCellClick(r, c);
+                    });
+                    cell.appendChild(piece);
+                }
+
+                const move = moves.find(m => m.to.r === r && m.to.c === c);
+                if (move) {
+                    if (move.captures.length > 0) cell.classList.add('valid-capture');
+                    else cell.classList.add('valid-move');
+                    
+                    cell.addEventListener('click', () => this.executeMove(move));
+                } else if (!pieceVal) {
+                    cell.addEventListener('click', () => {
+                        this.selectedPiece = null;
+                        this.render();
+                    });
+                }
+
+                this.boardEl.appendChild(cell);
+            }
+        }
+    }
+
+    handleCellClick(r, c) {
+        if (this.gameOver || this.currentPlayer !== 1) return;
+
+        const piece = this.board[r][c];
+        if (piece !== 1 && piece !== 3) return;
+
+        const allCaptures = this.getAllCaptures(1, this.board);
+        if (allCaptures.length > 0) {
+            const canCapture = allCaptures.some(m => m.from.r === r && m.from.c === c);
+            if (!canCapture) {
+                this.statusText.innerText = "¡Debes capturar!";
+                setTimeout(() => this.updateStatus(), 1500);
+                return;
+            }
+        }
+
+        this.selectedPiece = { r, c };
+        this.render();
+    }
+
+    executeMove(move) {
+        if (this.gameOver || this.currentPlayer !== 1) return;
+
+        this.applyMove(this.board, move);
+        this.selectedPiece = null;
+
+        if (move.captures.length > 0) {
+            const furtherCaptures = this.getCapturesForPiece(move.to.r, move.to.c, this.board);
+            if (furtherCaptures.length > 0) {
+                this.selectedPiece = { r: move.to.r, c: move.to.c };
+                this.render();
+                this.statusText.innerText = "¡Captura múltiple! Continúa...";
+                return;
+            }
+        }
+
+        this.endTurn();
+    }
+
+    applyMove(boardState, move) {
+        const piece = boardState[move.from.r][move.from.c];
+        boardState[move.from.r][move.from.c] = 0;
+        boardState[move.to.r][move.to.c] = piece;
+
+        move.captures.forEach(cap => {
+            boardState[cap.r][cap.c] = 0;
+        });
+
+        if (piece === 1 && move.to.r === 0) boardState[move.to.r][move.to.c] = 3;
+        if (piece === 2 && move.to.r === 7) boardState[move.to.r][move.to.c] = 4;
+    }
+
+    endTurn() {
+        this.render();
+        if (this.checkWin()) return;
+
+        this.currentPlayer = this.currentPlayer === 1 ? 2 : 1;
+        this.updateStatus();
+
+        if (this.currentPlayer === 2) {
+            setTimeout(() => this.aiTurn(), 800);
+        }
+    }
+
+    getMovesForPiece(r, c, boardState, onlyCaptures = false) {
+        const piece = boardState[r][c];
+        if (piece === 0) return [];
+
+        const isRed = piece === 1 || piece === 3;
+        const isKing = piece === 3 || piece === 4;
+        const moves = [];
+        const captures = [];
+
+        const dirs = [];
+        if (isRed || isKing) dirs.push([-1, -1], [-1, 1]);
+        if (!isRed || isKing) dirs.push([1, -1], [1, 1]);
+
+        dirs.forEach(([dr, dc]) => {
+            const midR = r + dr, midC = c + dc;
+            const destR = r + dr * 2, destC = c + dc * 2;
+
+            if (destR >= 0 && destR < 8 && destC >= 0 && destC < 8) {
+                const midPiece = boardState[midR][midC];
+                const destPiece = boardState[destR][destC];
+                
+                const isEnemy = isRed ? (midPiece === 2 || midPiece === 4) : (midPiece === 1 || midPiece === 3);
+                if (isEnemy && destPiece === 0) {
+                    captures.push({
+                        from: { r, c },
+                        to: { r: destR, c: destC },
+                        captures: [{ r: midR, c: midC }]
+                    });
+                }
+            }
+        });
+
+        if (captures.length > 0) return captures;
+        if (onlyCaptures) return [];
+
+        dirs.forEach(([dr, dc]) => {
+            const destR = r + dr, destC = c + dc;
+            if (destR >= 0 && destR < 8 && destC >= 0 && destC < 8 && boardState[destR][destC] === 0) {
+                moves.push({
+                    from: { r, c },
+                    to: { r: destR, c: destC },
+                    captures: []
+                });
+            }
+        });
+
+        return moves;
+    }
+
+    getAllCaptures(player, boardState) {
+        const allMoves = [];
+        for (let r = 0; r < 8; r++) {
+            for (let c = 0; c < 8; c++) {
+                const p = boardState[r][c];
+                if ((player === 1 && (p === 1 || p === 3)) || (player === 2 && (p === 2 || p === 4))) {
+                    const caps = this.getCapturesForPiece(r, c, boardState);
+                    allMoves.push(...caps);
+                }
+            }
+        }
+        return allMoves;
+    }
+
+    getCapturesForPiece(r, c, boardState) {
+        return this.getMovesForPiece(r, c, boardState, true);
+    }
+
+    getAllMoves(player, boardState) {
+        const captures = this.getAllCaptures(player, boardState);
+        if (captures.length > 0) return captures;
+
+        const moves = [];
+        for (let r = 0; r < 8; r++) {
+            for (let c = 0; c < 8; c++) {
+                const p = boardState[r][c];
+                if ((player === 1 && (p === 1 || p === 3)) || (player === 2 && (p === 2 || p === 4))) {
+                    moves.push(...this.getMovesForPiece(r, c, boardState));
+                }
+            }
+        }
+        return moves;
+    }
+
+    aiTurn() {
+        if (this.gameOver) return;
+
+        const depth = 3;
+        const bestMove = this.minimaxRoot(depth, this.board, true);
+
+        if (bestMove) {
+            this.applyMove(this.board, bestMove);
+            
+            // Manejo visual de captura múltiple para la IA
+            if (bestMove.captures.length > 0) {
+                const further = this.getCapturesForPiece(bestMove.to.r, bestMove.to.c, this.board);
+                if (further.length > 0) {
+                    this.render();
+                    setTimeout(() => {
+                        // La IA continúa capturando greedy (simple pero efectivo)
+                        this.applyMove(this.board, further[0]);
+                        this.render();
+                        setTimeout(() => this.aiTurn(), 800);
+                    }, 800);
+                    return;
+                }
+            }
+            this.endTurn();
+        } else {
+            this.endGame(1);
+        }
+    }
+
+    minimaxRoot(depth, boardState, isMaximizing) {
+        const moves = this.getAllMoves(2, boardState);
+        let bestVal = -Infinity;
+        let bestMove = null;
+
+        moves.sort(() => Math.random() - 0.5);
+
+        for (const move of moves) {
+            const newBoard = boardState.map(row => [...row]);
+            this.applyMove(newBoard, move);
+            
+            // FIX: Cambiado 'eval' por 'currentScore'
+            const currentScore = this.minimax(depth - 1, newBoard, -Infinity, Infinity, false);
+            if (currentScore > bestVal) {
+                bestVal = currentScore;
+                bestMove = move;
+            }
+        }
+        return bestMove;
+    }
+
+    minimax(depth, boardState, alpha, beta, isMaximizing) {
+        if (depth === 0) return this.evaluateBoard(boardState);
+
+        const player = isMaximizing ? 2 : 1;
+        const moves = this.getAllMoves(player, boardState);
+
+        if (moves.length === 0) {
+            return isMaximizing ? -10000 : 10000;
+        }
+
+        if (isMaximizing) {
+            let maxEval = -Infinity;
+            for (const move of moves) {
+                const newBoard = boardState.map(row => [...row]);
+                this.applyMove(newBoard, move);
+                // FIX: Cambiado 'eval' por 'currentScore'
+                const currentScore = this.minimax(depth - 1, newBoard, alpha, beta, false);
+                maxEval = Math.max(maxEval, currentScore);
+                alpha = Math.max(alpha, currentScore);
+                if (beta <= alpha) break;
+            }
+            return maxEval;
+        } else {
+            let minEval = Infinity;
+            for (const move of moves) {
+                const newBoard = boardState.map(row => [...row]);
+                this.applyMove(newBoard, move);
+                // FIX: Cambiado 'eval' por 'currentScore'
+                const currentScore = this.minimax(depth - 1, newBoard, alpha, beta, true);
+                minEval = Math.min(minEval, currentScore);
+                beta = Math.min(beta, currentScore);
+                if (beta <= alpha) break;
+            }
+            return minEval;
+        }
+    }
+
+    evaluateBoard(boardState) {
+        let score = 0;
+        for (let r = 0; r < 8; r++) {
+            for (let c = 0; c < 8; c++) {
+                const p = boardState[r][c];
+                if (p === 0) continue;
+
+                let val = 0;
+                if (p === 2) val = this.weights.piece + (r * 2);
+                if (p === 4) val = this.weights.king + 20;
+                if (p === 1) val = -(this.weights.piece + ((7 - r) * 2));
+                if (p === 3) val = -(this.weights.king + 20);
+
+                if (c === 0 || c === 7) val += (p > 2 ? 5 : -5);
+
+                score += val;
+            }
+        }
+        return score;
+    }
+
+    checkWin() {
+        const p1Moves = this.getAllMoves(1, this.board);
+        const p2Moves = this.getAllMoves(2, this.board);
+        const p1Count = this.board.flat().filter(v => v === 1 || v === 3).length;
+        const p2Count = this.board.flat().filter(v => v === 2 || v === 4).length;
+
+        if (p2Count === 0 || (this.currentPlayer === 2 && p2Moves.length === 0)) {
+            this.endGame(1); return true;
+        }
+        if (p1Count === 0 || (this.currentPlayer === 1 && p1Moves.length === 0)) {
+            this.endGame(2); return true;
+        }
+        return false;
+    }
+
+    endGame(winner) {
+        this.gameOver = true;
+        const modal = document.getElementById('modal');
+        const title = document.getElementById('winner-text');
+        const msg = document.getElementById('winner-msg');
+
+        if (winner === 1) {
+            title.innerText = "¡GANASTE!";
+            title.style.color = "#2ecc71";
+            msg.innerText = "Has eliminado a la IA.";
+        } else {
+            title.innerText = "LA IA GANA";
+            title.style.color = "#e74c3c";
+            msg.innerText = "La máquina ha sido superior.";
+        }
+        modal.classList.add('show');
+    }
+
+    updateStatus() {
+        const pStatus = document.getElementById('status-player');
+        const aStatus = document.getElementById('status-ai');
+        
+        if (this.currentPlayer === 1) {
+            pStatus.classList.add('active');
+            aStatus.classList.remove('active');
+            this.statusText.innerText = "Tu turno: Selecciona una ficha";
+        } else {
+            pStatus.classList.remove('active');
+            aStatus.classList.add('active');
+            this.statusText.innerText = "IA pensando...";
+        }
+    }
+}
+
+const game = new CheckersGame();
+</script>
+</body>
+</html>

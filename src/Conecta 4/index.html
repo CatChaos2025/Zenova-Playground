@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Conecta 4 - Estrategia vs IA</title>
+<style>
+    :root {
+        --cell: min(64px, 11.5vw);
+        --gap: min(8px, 1.2vw);
+        --board-blue: #1565c0;
+        --board-dark: #0d47a1;
+        --human-color: #ff5252;
+        --ai-color: #ffd740;
+        --bg: #101828;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
+    body {
+        background: var(--bg); color: white;
+        font-family: 'Segoe UI', sans-serif;
+        display: flex; flex-direction: column; align-items: center;
+        justify-content: center; min-height: 100vh; padding: 15px;
+    }
+    h1 { color: var(--ai-color); margin-bottom: 10px; letter-spacing: 2px; }
+
+    .scoreboard { display: flex; gap: 25px; margin-bottom: 10px; font-size: 1.15rem; font-weight: bold; }
+    .score { padding: 6px 16px; border-radius: 8px; display: flex; align-items: center; gap: 8px; opacity: .55; transition: .3s; }
+    .score.active { opacity: 1; transform: scale(1.08); box-shadow: 0 0 12px rgba(255,255,255,.2); }
+    .score .dot { width: 16px; height: 16px; border-radius: 50%; }
+    #score-human { border: 2px solid var(--human-color); } #score-human .dot { background: var(--human-color); }
+    #score-ai { border: 2px solid var(--ai-color); } #score-ai .dot { background: var(--ai-color); }
+
+    #status { height: 1.6em; margin-bottom: 12px; color: #aaa; }
+    #status.thinking { color: var(--ai-color); animation: blink 1s infinite; }
+    @keyframes blink { 50% { opacity: .4; } }
+
+    .diff-row { display: flex; gap: 8px; margin-bottom: 15px; }
+    .diff-btn { padding: 6px 14px; border: none; border-radius: 5px; background: #26364f; color: #aaa; font-weight: bold; cursor: pointer; }
+    .diff-btn.active { background: var(--ai-color); color: #101828; }
+
+    .board-wrap { position: relative; }
+
+    #preview {
+        position: absolute; top: calc(-1 * var(--cell) - 8px);
+        width: var(--cell); height: var(--cell); border-radius: 50%;
+        background: var(--human-color); opacity: 0; transition: left .1s, opacity .2s;
+        pointer-events: none;
+    }
+    #preview.show { opacity: .85; }
+
+    .board {
+        display: grid;
+        grid-template-columns: repeat(7, var(--cell));
+        grid-template-rows: repeat(6, var(--cell));
+        gap: var(--gap);
+        background: linear-gradient(180deg, var(--board-blue), var(--board-dark));
+        padding: var(--gap); border-radius: 10px;
+        box-shadow: 0 12px 30px rgba(0,0,0,.5);
+    }
+
+    .cell {
+        width: var(--cell); height: var(--cell);
+        background: var(--bg); border-radius: 50%;
+        box-shadow: inset 0 3px 8px rgba(0,0,0,.7);
+        cursor: pointer; overflow: visible;
+    }
+
+    .disc { width: 100%; height: 100%; border-radius: 50%; }
+    .disc.human { background: radial-gradient(circle at 35% 30%, #ff8a80, var(--human-color) 60%, #b71c1c); }
+    .disc.ai { background: radial-gradient(circle at 35% 30%, #fff59d, var(--ai-color) 60%, #ff8f00); }
+
+    .disc.falling { animation: fall .55s cubic-bezier(.5,0,1,1); }
+    @keyframes fall {
+        0% { transform: translateY(calc(var(--fall) * -1)); }
+        70% { transform: translateY(0); }
+        82% { transform: translateY(calc(var(--cell) * -0.18)); }
+        100% { transform: translateY(0); }
+    }
+
+    .disc.win { animation: glow 1s infinite alternate; }
+    @keyframes glow {
+        from { box-shadow: 0 0 5px 2px #fff; }
+        to { box-shadow: 0 0 18px 8px #fff; }
+    }
+
+    .controls { margin-top: 18px; }
+    button.main { padding: 10px 22px; border: none; border-radius: 6px; background: var(--human-color); color: white; font-weight: bold; font-size: 1rem; cursor: pointer; }
+    button.main:active { transform: scale(.95); }
+
+    .modal { position: fixed; inset: 0; background: rgba(0,0,0,.85); display: flex; align-items: center; justify-content: center; opacity: 0; pointer-events: none; transition: .3s; z-index: 10; }
+    .modal.show { opacity: 1; pointer-events: all; }
+    .modal-content { background: #1b2740; padding: 40px; border-radius: 14px; text-align: center; border: 2px solid var(--ai-color); }
+    .modal h2 { font-size: 2.2rem; margin-bottom: 12px; }
+    .modal p { margin-bottom: 20px; color: #aaa; }
+</style>
+</head>
+<body>
+
+<h1>CONECTA 4</h1>
+
+<div class="scoreboard">
+    <div class="score active" id="score-human"><span class="dot"></span> Tú: <span id="pts-human">0</span></div>
+    <div class="score" id="score-ai"><span class="dot"></span> IA: <span id="pts-ai">0</span></div>
+</div>
+
+<div id="status">Tu turno: elige una columna</div>
+
+<div class="diff-row">
+    <button class="diff-btn" onclick="game.setDifficulty('facil', this)">Fácil</button>
+    <button class="diff-btn active" onclick="game.setDifficulty('normal', this)">Normal</button>
+    <button class="diff-btn" onclick="game.setDifficulty('dificil', this)">Difícil</button>
+</div>
+
+<div class="board-wrap" id="board-wrap">
+    <div id="preview"></div>
+    <div class="board" id="board"></div>
+</div>
+
+<div class="controls">
+    <button class="main" onclick="game.newGame()">Nueva Partida</button>
+</div>
+
+<div class="modal" id="modal">
+    <div class="modal-content">
+        <h2 id="modal-title"></h2>
+        <p id="modal-msg"></p>
+        <button class="main" onclick="game.newGame(); document.getElementById('modal').classList.remove('show')">Jugar de Nuevo</button>
+    </div>
+</div>
+
+<script>
+class Connect4 {
+    constructor() {
+        this.ROWS = 6; this.COLS = 7;
+        this.HUMAN = 1; this.AI = 2;
+        this.depths = { facil: 2, normal: 4, dificil: 6 };
+        this.difficulty = 'normal';
+        this.points = { 1: 0, 2: 0 };
+        this.moveOrder = [3, 2, 4, 1, 5, 0, 6]; // centro primero (mejor poda)
+
+        this.boardEl = document.getElementById('board');
+        this.previewEl = document.getElementById('preview');
+        this.wrapEl = document.getElementById('board-wrap');
+        this.statusEl = document.getElementById('status');
+
+        this.buildDOM();
+        this.newGame();
+    }
+
+    buildDOM() {
+        this.cellEls = [];
+        for (let r = 0; r < this.ROWS; r++) {
+            this.cellEls.push([]);
+            for (let c = 0; c < this.COLS; c++) {
+                const cell = document.createElement('div');
+                cell.classList.add('cell');
+                cell.addEventListener('click', () => this.humanMove(c));
+                cell.addEventListener('mouseenter', () => this.showPreview(c));
+                this.boardEl.appendChild(cell);
+                this.cellEls[r].push(cell);
+            }
+        }
+        this.boardEl.addEventListener('mouseleave', () => this.previewEl.classList.remove('show'));
+    }
+
+    newGame() {
+        this.board = Array.from({ length: this.ROWS }, () => Array(this.COLS).fill(0));
+        this.turn = this.HUMAN;
+        this.gameOver = false;
+        this.cellEls.flat().forEach(c => c.innerHTML = '');
+        this.previewEl.classList.remove('show');
+        this.setStatus('Tu turno: elige una columna', false);
+        this.updateScoreUI();
+    }
+
+    setDifficulty(d, btn) {
+        this.difficulty = d;
+        document.querySelectorAll('.diff-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        this.newGame();
+    }
+
+    setStatus(txt, thinking) {
+        this.statusEl.innerText = txt;
+        this.statusEl.classList.toggle('thinking', thinking);
+    }
+
+    showPreview(c) {
+        if (this.gameOver || this.turn !== this.HUMAN || this.board[0][c] !== 0) {
+            this.previewEl.classList.remove('show'); return;
+        }
+        const cellRect = this.cellEls[0][c].getBoundingClientRect();
+        const wrapRect = this.wrapEl.getBoundingClientRect();
+        this.previewEl.style.left = (cellRect.left - wrapRect.left) + 'px';
+        this.previewEl.classList.add('show');
+    }
+
+    dropRow(col) {
+        for (let r = this.ROWS - 1; r >= 0; r--)
+            if (this.board[r][col] === 0) return r;
+        return -1;
+    }
+
+    placeDisc(row, col, player) {
+        this.board[row][col] = player;
+        const disc = document.createElement('div');
+        disc.classList.add('disc', player === this.HUMAN ? 'human' : 'ai', 'falling');
+        // Distancia de caída = (fila+1) celdas + gaps
+        const gap = parseFloat(getComputedStyle(this.boardEl).gap) || 8;
+        disc.style.setProperty('--fall', `calc(${(row + 1) * 100}% + ${(row + 1) * gap}px)`);
+        this.cellEls[row][col].appendChild(disc);
+    }
+
+    humanMove(col) {
+        if (this.gameOver || this.turn !== this.HUMAN) return;
+        const row = this.dropRow(col);
+        if (row === -1) return;
+
+        this.previewEl.classList.remove('show');
+        this.placeDisc(row, col, this.HUMAN);
+        this.afterMove(row, col, this.HUMAN);
+    }
+
+    afterMove(row, col, player) {
+        const win = this.checkWin();
+        if (win) { this.endGame(player, win.cells); return; }
+        if (this.board[0].every(v => v !== 0)) { this.endGame(0); return; }
+
+        if (player === this.HUMAN) {
+            this.turn = this.AI;
+            this.setStatus('IA pensando…', true);
+            this.updateScoreUI();
+            setTimeout(() => this.aiMove(), 450 + Math.random() * 350);
+        } else {
+            this.turn = this.HUMAN;
+            this.setStatus('Tu turno: elige una columna', false);
+            this.updateScoreUI();
+        }
+    }
+
+    aiMove() {
+        if (this.gameOver) return;
+        const col = this.getBestMove();
+        const row = this.dropRow(col);
+        this.placeDisc(row, col, this.AI);
+        this.afterMove(row, col, this.AI);
+    }
+
+    /* ================= IA: MINIMAX + PODA ALFA-BETA ================= */
+    getBestMove() {
+        const valid = this.moveOrder.filter(c => this.board[0][c] === 0);
+
+        // En fácil, a veces juega al azar
+        if (this.difficulty === 'facil' && Math.random() < 0.35)
+            return valid[Math.floor(Math.random() * valid.length)];
+
+        const depth = this.depths[this.difficulty];
+        let best = -Infinity, bestCols = [];
+
+        for (const c of valid) {
+            const r = this.dropRow(c);
+            this.board[r][c] = this.AI;
+            const score = this.minimax(depth - 1, -Infinity, Infinity, false);
+            this.board[r][c] = 0;
+
+            if (score > best) { best = score; bestCols = [c]; }
+            else if (score === best) bestCols.push(c);
+        }
+        return bestCols[Math.floor(Math.random() * bestCols.length)];
+    }
+
+    minimax(depth, alpha, beta, maximizing) {
+        const win = this.checkWin();
+        if (win) return win.winner === this.AI ? 1000000 + depth : -1000000 - depth;
+        if (this.board[0].every(v => v !== 0)) return 0;
+        if (depth === 0) return this.evaluate();
+
+        if (maximizing) {
+            let best = -Infinity;
+            for (const c of this.moveOrder) {
+                const r = this.dropRow(c);
+                if (r === -1) continue;
+                this.board[r][c] = this.AI;
+                best = Math.max(best, this.minimax(depth - 1, alpha, beta, false));
+                this.board[r][c] = 0;
+                alpha = Math.max(alpha, best);
+                if (alpha >= beta) break;
+            }
+            return best;
+        } else {
+            let best = Infinity;
+            for (const c of this.moveOrder) {
+                const r = this.dropRow(c);
+                if (r === -1) continue;
+                this.board[r][c] = this.HUMAN;
+                best = Math.min(best, this.minimax(depth - 1, alpha, beta, true));
+                this.board[r][c] = 0;
+                beta = Math.min(beta, best);
+                if (alpha >= beta) break;
+            }
+            return best;
+        }
+    }
+
+    evaluate() {
+        let score = 0;
+        // Preferir el centro
+        for (let r = 0; r < this.ROWS; r++) {
+            if (this.board[r][3] === this.AI) score += 6;
+            else if (this.board[r][3] === this.HUMAN) score -= 6;
+        }
+        // Todas las ventanas de 4
+        const dirs = [[0,1],[1,0],[1,1],[1,-1]];
+        for (let r = 0; r < this.ROWS; r++) {
+            for (let c = 0; c < this.COLS; c++) {
+                for (const [dr, dc] of dirs) {
+                    const er = r + 3*dr, ec = c + 3*dc;
+                    if (er < 0 || er >= this.ROWS || ec < 0 || ec >= this.COLS) continue;
+                    score += this.scoreWindow([
+                        this.board[r][c], this.board[r+dr][c+dc],
+                        this.board[r+2*dr][c+2*dc], this.board[r+3*dr][c+3*dc]
+                    ]);
+                }
+            }
+        }
+        return score;
+    }
+
+    scoreWindow(w) {
+        const ai = w.filter(v => v === this.AI).length;
+        const hu = w.filter(v => v === this.HUMAN).length;
+        const empty = w.filter(v => v === 0).length;
+        if (ai === 4) return 100000;
+        if (ai === 3 && empty === 1) return 50;
+        if (ai === 2 && empty === 2) return 10;
+        if (hu === 3 && empty === 1) return -80;
+        if (hu === 4) return -100000;
+        return 0;
+    }
+
+    checkWin() {
+        const dirs = [[0,1],[1,0],[1,1],[1,-1]];
+        for (let r = 0; r < this.ROWS; r++) {
+            for (let c = 0; c < this.COLS; c++) {
+                const p = this.board[r][c];
+                if (!p) continue;
+                for (const [dr, dc] of dirs) {
+                    const cells = [[r,c]];
+                    for (let k = 1; k < 4; k++) {
+                        const nr = r + dr*k, nc = c + dc*k;
+                        if (nr < 0 || nr >= this.ROWS || nc < 0 || nc >= this.COLS || this.board[nr][nc] !== p) break;
+                        cells.push([nr, nc]);
+                    }
+                    if (cells.length === 4) return { winner: p, cells };
+                }
+            }
+        }
+        return null;
+    }
+
+    endGame(winner, cells) {
+        this.gameOver = true;
+        this.previewEl.classList.remove('show');
+
+        if (cells) cells.forEach(([r, c]) => {
+            const disc = this.cellEls[r][c].querySelector('.disc');
+            if (disc) disc.classList.add('win');
+        });
+
+        if (winner) this.points[winner]++;
+        this.updateScoreUI();
+
+        setTimeout(() => {
+            const t = document.getElementById('modal-title');
+            const m = document.getElementById('modal-msg');
+            if (winner === this.HUMAN) { t.innerText = '¡GANASTE! 🎉'; t.style.color = '#69f0ae'; m.innerText = 'Has superado a la IA.'; }
+            else if (winner === this.AI) { t.innerText = 'LA IA GANA 🤖'; t.style.color = '#ff5252'; m.innerText = 'La máquina conectó 4 primero.'; }
+            else { t.innerText = 'EMPATE'; t.style.color = '#ffd740'; m.innerText = 'Tablero lleno sin ganador.'; }
+            document.getElementById('modal').classList.add('show');
+        }, 1100);
+    }
+
+    updateScoreUI() {
+        document.getElementById('pts-human').innerText = this.points[1];
+        document.getElementById('pts-ai').innerText = this.points[2];
+        document.getElementById('score-human').classList.toggle('active', this.turn === this.HUMAN && !this.gameOver);
+        document.getElementById('score-ai').classList.toggle('active', this.turn === this.AI && !this.gameOver);
+    }
+}
+
+const game = new Connect4();
+</script>
+</body>
+</html>

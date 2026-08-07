@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tenis Arcade JS</title>
+    <style>
+        :root { --court: #2c5f2d; --line: #fff; --ball: #ccff00; }
+        * { margin: 0; padding: 0; box-sizing: border-box; user-select: none; }
+        body {
+            background: #1a1a1a;
+            color: white;
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            overflow: hidden;
+        }
+        #scoreboard {
+            display: grid;
+            grid-template-columns: 1fr auto 1fr;
+            gap: 20px;
+            margin-bottom: 10px;
+            font-size: 18px;
+            font-weight: bold;
+            text-align: center;
+            width: 800px;
+            max-width: 95vw;
+        }
+        .sets { font-size: 14px; opacity: 0.7; }
+        .current-game { font-size: 28px; color: var(--ball); }
+        canvas {
+            background: var(--court);
+            border: 4px solid #fff;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            cursor: none;
+            touch-action: none;
+        }
+        #ui-overlay {
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            background: rgba(0,0,0,0.85);
+            padding: 30px 50px;
+            border-radius: 10px;
+            border: 2px solid var(--ball);
+            z-index: 10;
+        }
+        #ui-overlay h1 { font-size: 36px; margin-bottom: 10px; color: var(--ball); }
+        #ui-overlay p { margin: 5px 0; opacity: 0.9; }
+        button {
+            margin-top: 20px;
+            padding: 12px 30px;
+            font-size: 18px;
+            background: var(--ball);
+            color: #000;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        button:hover { filter: brightness(1.1); }
+        .controls { margin-top: 10px; font-size: 12px; opacity: 0.5; }
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+    <div id="scoreboard">
+        <div>👤 TÚ<br><span class="sets" id="p-sets">Sets: 0</span></div>
+        <div class="current-game"><span id="p-game">0</span> - <span id="c-game">0</span></div>
+        <div>🤖 CPU<br><span class="sets" id="c-sets">Sets: 0</span></div>
+    </div>
+
+    <canvas id="court" width="800" height="500"></canvas>
+    <div class="controls">MOUSE/TÁCTIL para mover · CLICK/ESPACIO para golpear</div>
+
+    <div id="ui-overlay">
+        <h1 id="title">TENIS ARCADE</h1>
+        <p id="msg">Primero en ganar 2 sets gana el partido</p>
+        <button id="btn" onclick="startMatch()">JUGAR PARTIDO</button>
+    </div>
+
+<script>
+/**
+ * TENIS ARCADE
+ * Vista lateral con física de gravedad y rebotes.
+ * Sistema de puntuación real: 15-30-40-Juego-Sets
+ */
+const canvas = document.getElementById('court');
+const ctx = canvas.getContext('2d');
+const W = canvas.width, H = canvas.height;
+
+// Físicas
+const GRAVITY = 0.25;
+const FRICTION = 0.98;
+const BOUNCE = 0.75;
+const NET_X = W / 2;
+const NET_H = 60;
+const GROUND_Y = H - 40;
+
+// Jugadores
+const PLAYER_W = 30, PLAYER_H = 60;
+let player = { x: 100, y: GROUND_Y - PLAYER_H, score: 0, sets: 0 };
+let cpu = { x: W - 130, y: GROUND_Y - PLAYER_H, score: 0, sets: 0, targetX: W - 130 };
+
+// Pelota
+let ball = { x: 0, y: 0, vx: 0, vy: 0, active: false, server: 'player', bounces: 0 };
+let rallyActive = false;
+let matchOver = false;
+
+// Input
+let mouseX = player.x;
+let clickPressed = false;
+
+// ─── Sistema de Puntuación Tenis ─────────────────────────────
+const POINTS = ['0', '15', '30', '40'];
+let pPointsIdx = 0, cPointsIdx = 0;
+let advantage = null; // 'player' o 'cpu'
+
+function updateScoreUI() {
+    let pText, cText;
+    if (pPointsIdx >= 3 && cPointsIdx >= 3) {
+        // Deuce / Ventaja
+        if (advantage === 'player') { pText = 'AD'; cText = '40'; }
+        else if (advantage === 'cpu') { pText = '40'; cText = 'AD'; }
+        else { pText = '40'; cText = '40'; } // Deuce
+    } else {
+        pText = POINTS[Math.min(pPointsIdx, 3)];
+        cText = POINTS[Math.min(cPointsIdx, 3)];
+    }
+    document.getElementById('p-game').textContent = pText;
+    document.getElementById('c-game').textContent = cText;
+    document.getElementById('p-sets').textContent = `Sets: ${player.sets}`;
+    document.getElementById('c-sets').textContent = `Sets: ${cpu.sets}`;
+}
+
+function pointWon(winner) {
+    rallyActive = false;
+    ball.active = false;
+
+    if (winner === 'player') {
+        if (pPointsIdx >= 3 && cPointsIdx >= 3) {
+            if (advantage === 'player') gameWon('player');
+            else if (advantage === 'cpu') advantage = null;
+            else advantage = 'player';
+        } else {
+            pPointsIdx++;
+            if (pPointsIdx > 3) gameWon('player');
+        }
+    } else {
+        if (pPointsIdx >= 3 && cPointsIdx >= 3) {
+            if (advantage === 'cpu') gameWon('cpu');
+            else if (advantage === 'player') advantage = null;
+            else advantage = 'cpu';
+        } else {
+            cPointsIdx++;
+            if (cPointsIdx > 3) gameWon('cpu');
+        }
+    }
+    updateScoreUI();
+    if (!matchOver) setTimeout(serve, 1000);
+}
+
+function gameWon(winner) {
+    if (winner === 'player') player.sets++;
+    else cpu.sets++;
+    
+    pPointsIdx = 0; cPointsIdx = 0; advantage = null;
+    ball.server = winner === 'player' ? 'player' : 'cpu';
+    
+    if (player.sets >= 2 || cpu.sets >= 2) {
+        matchOver = true;
+        showOverlay(
+            winner === 'player' ? '¡PARTIDO GANADO!' : 'PARTIDO PERDIDO',
+            `Resultado: ${player.sets} - ${cpu.sets}`,
+            'NUEVO PARTIDO'
+        );
+    }
+    updateScoreUI();
+}
+
+// ─── Saque ───────────────────────────────────────────────────
+function serve() {
+    if (matchOver) return;
+    ball.bounces = 0;
+    ball.active = true;
+    rallyActive = true;
+    
+    if (ball.server === 'player') {
+        ball.x = player.x + PLAYER_W;
+        ball.y = player.y;
+        ball.vx = 8 + Math.random() * 3;
+        ball.vy = -10 - Math.random() * 3;
+    } else {
+        ball.x = cpu.x;
+        ball.y = cpu.y;
+        ball.vx = -(8 + Math.random() * 3);
+        ball.vy = -10 - Math.random() * 3;
+    }
+}
+
+// ─── Golpe del Jugador ──────────────────────────────────────
+function playerHit() {
+    const dx = ball.x - (player.x + PLAYER_W/2);
+    const dy = ball.y - (player.y + PLAYER_H/2);
+    const dist = Math.sqrt(dx*dx + dy*dy);
+    
+    if (dist < 70 && ball.x < NET_X && ball.active) {
+        // Drive normal o Lob según altura
+        const power = 9 + Math.random() * 3;
+        ball.vx = power;
+        ball.vy = ball.y < player.y + 20 ? -12 : -7; // Alto=bajo, Bajo=alto
+        ball.bounces = 0;
+        playSound(600);
+    }
+}
+
+// ─── IA de la CPU ───────────────────────────────────────────
+function updateCPU() {
+    if (!ball.active) {
+        cpu.targetX = W - 130; // Posición base
+    } else if (ball.vx > 0) {
+        // Predicción simple: ir hacia donde va la pelota
+        cpu.targetX = ball.x - PLAYER_W/2;
+    } else {
+        cpu.targetX = W - 130; // Volver al centro
+    }
+    
+    // Movimiento suave con límite de velocidad
+    const diff = cpu.targetX - cpu.x;
+    const speed = 5.5;
+    cpu.x += Math.max(-speed, Math.min(speed, diff));
+    cpu.x = Math.max(NET_X + 20, Math.min(W - PLAYER_W - 10, cpu.x));
+    
+    // Golpe automático cuando la pelota está cerca
+    if (ball.active && ball.vx > 0) {
+        const dx = ball.x - (cpu.x + PLAYER_W/2);
+        const dy = ball.y - (cpu.y + PLAYER_H/2);
+        if (Math.sqrt(dx*dx + dy*dy) < 65 && ball.x > NET_X) {
+            const power = 8 + Math.random() * 4;
+            ball.vx = -power;
+            ball.vy = -8 - Math.random() * 5;
+            ball.bounces = 0;
+            playSound(500);
+        }
+    }
+}
+
+// ─── Física Principal ────────────────────────────────────────
+function update() {
+    if (!ball.active || matchOver) return;
+    
+    // Gravedad y movimiento
+    ball.vy += GRAVITY;
+    ball.vx *= FRICTION;
+    ball.x += ball.vx;
+    ball.y += ball.vy;
+    
+    // Rebote suelo
+    if (ball.y >= GROUND_Y - 8) {
+        ball.y = GROUND_Y - 8;
+        ball.vy *= -BOUNCE;
+        ball.bounces++;
+        playSound(200);
+        
+        // Punto perdido si hay 2 bounces o sale fuera
+        if (ball.bounces >= 2) {
+            pointWon(ball.x < NET_X ? 'cpu' : 'player');
+        }
+    }
+    
+    // Colisión con la red
+    if (Math.abs(ball.x - NET_X) < 5 && ball.y > GROUND_Y - NET_H) {
+        ball.vx *= -0.5;
+        ball.x = ball.x < NET_X ? NET_X - 6 : NET_X + 6;
+        playSound(150);
+    }
+    
+    // Fuera de límites laterales
+    if (ball.x < 0 || ball.x > W) {
+        pointWon(ball.x < 0 ? 'cpu' : 'player');
+    }
+    
+    // Movimiento jugador
+    player.x = Math.max(10, Math.min(NET_X - PLAYER_W - 10, mouseX - PLAYER_W/2));
+    
+    updateCPU();
+    
+    // Click para golpear
+    if (clickPressed) {
+        playerHit();
+        clickPressed = false;
+    }
+}
+
+// ─── Renderizado ─────────────────────────────────────────────
+function draw() {
+    // Cancha
+    ctx.fillStyle = '#2c5f2d';
+    ctx.fillRect(0, 0, W, H);
+    
+    // Líneas de cancha
+    ctx.strokeStyle = 'rgba(255,255,255,0.6)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(0, GROUND_Y); ctx.lineTo(W, GROUND_Y); // Línea base
+    ctx.moveTo(NET_X, GROUND_Y); ctx.lineTo(NET_X, GROUND_Y - NET_H); // Red
+    ctx.stroke();
+    
+    // Red con patrón
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(NET_X, GROUND_Y);
+    ctx.lineTo(NET_X, GROUND_Y - NET_H);
+    ctx.stroke();
+    
+    // Jugadores (rectángulos simples estilo arcade)
+    ctx.fillStyle = '#4fc3f7';
+    ctx.fillRect(player.x, player.y, PLAYER_W, PLAYER_H);
+    ctx.fillStyle = '#ff7043';
+    ctx.fillRect(cpu.x, cpu.y, PLAYER_W, PLAYER_H);
+    
+    // Pelota con sombra
+    if (ball.active) {
+        // Sombra
+        ctx.fillStyle = 'rgba(0,0,0,0.3)';
+        ctx.beginPath();
+        ctx.ellipse(ball.x, GROUND_Y, 8, 3, 0, 0, Math.PI*2);
+        ctx.fill();
+        
+        // Pelota
+        ctx.fillStyle = '#ccff00';
+        ctx.beginPath();
+        ctx.arc(ball.x, ball.y, 8, 0, Math.PI*2);
+        ctx.fill();
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+    }
+}
+
+// ─── Audio Simple ────────────────────────────────────────────
+let audioCtx;
+function playSound(freq) {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = 'sine';
+    osc.frequency.value = freq;
+    gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.1);
+    osc.connect(gain); gain.connect(audioCtx.destination);
+    osc.start(); osc.stop(audioCtx.currentTime + 0.1);
+}
+
+// ─── Loop Principal ──────────────────────────────────────────
+function loop() {
+    update();
+    draw();
+    requestAnimationFrame(loop);
+}
+
+// ─── Control UI ──────────────────────────────────────────────
+function showOverlay(title, msg, btnText) {
+    document.getElementById('title').textContent = title;
+    document.getElementById('msg').textContent = msg;
+    document.getElementById('btn').textContent = btnText;
+    document.getElementById('ui-overlay').classList.remove('hidden');
+}
+
+function startMatch() {
+    player.sets = 0; cpu.sets = 0;
+    pPointsIdx = 0; cPointsIdx = 0; advantage = null;
+    matchOver = false;
+    ball.server = 'player';
+    updateScoreUI();
+    document.getElementById('ui-overlay').classList.add('hidden');
+    serve();
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+}
+
+// ─── Eventos Input ───────────────────────────────────────────
+canvas.addEventListener('mousemove', e => {
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = W / rect.width;
+    mouseX = (e.clientX - rect.left) * scaleX;
+});
+
+canvas.addEventListener('mousedown', () => clickPressed = true);
+canvas.addEventListener('touchstart', e => {
+    e.preventDefault();
+    clickPressed = true;
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = W / rect.width;
+    mouseX = (e.touches[0].clientX - rect.left) * scaleX;
+}, {passive: false});
+
+document.addEventListener('keydown', e => {
+    if (e.code === 'Space') {
+        e.preventDefault();
+        if (matchOver || !ball.active) startMatch();
+        else clickPressed = true;
+    }
+});
+
+// Responsive
+function resize() {
+    const maxW = Math.min(window.innerWidth - 20, 800);
+    canvas.style.width = maxW + 'px';
+    canvas.style.height = (maxW * 0.625) + 'px';
+}
+window.addEventListener('resize', resize);
+resize();
+
+// Iniciar
+loop();
+</script>
+</body>
+</html>

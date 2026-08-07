@@ -1,0 +1,608 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Sky City: Architect Edition</title>
+    <style>
+        :root {
+            --sky-top: #0f172a;
+            --sky-mid: #1e3a8a;
+            --sky-bot: #60a5fa;
+            --ui-bg: rgba(15, 23, 42, 0.75);
+            --accent: #fbbf24;
+            --danger: #ef4444;
+            --glass: rgba(255, 255, 255, 0.08);
+        }
+        
+        * { margin: 0; padding: 0; box-sizing: border-box; user-select: none; touch-action: none; -webkit-tap-highlight-color: transparent; }
+        
+        body {
+            overflow: hidden;
+            background: linear-gradient(to bottom, var(--sky-top) 0%, var(--sky-mid) 50%, var(--sky-bot) 100%);
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            color: white;
+            height: 100vh; width: 100vw;
+        }
+
+        canvas { display: block; width: 100%; height: 100%; }
+
+        /* UI Layer */
+        .ui-layer { position: absolute; inset: 0; pointer-events: none; padding: 20px; display: flex; flex-direction: column; justify-content: space-between; z-index: 10; }
+        
+        .top-bar { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+        
+        .stat-card { 
+            background: var(--ui-bg); backdrop-filter: blur(12px); 
+            padding: 12px 20px; border-radius: 16px; 
+            border: 1px solid var(--glass);
+            box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+            display: flex; flex-direction: column; align-items: center;
+            min-width: 90px;
+        }
+        
+        .stat-label { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 1.5px; opacity: 0.6; margin-bottom: 4px; }
+        .stat-val { font-size: 1.6rem; font-weight: 800; color: var(--accent); line-height: 1; }
+        
+        .stability-container { width: 180px; }
+        .stab-bar { width: 100%; height: 6px; background: rgba(255,255,255,0.1); border-radius: 3px; margin-top: 8px; overflow: hidden; position: relative; }
+        .stab-fill { height: 100%; background: linear-gradient(90deg, var(--danger), var(--accent), #4ade80); width: 100%; transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1); }
+        .wind-indicator { font-size: 0.8rem; margin-top: 4px; opacity: 0.8; display: flex; align-items: center; gap: 5px; }
+
+        /* Modals */
+        .modal { 
+            position: absolute; inset: 0; background: rgba(0,0,0,0.6); backdrop-filter: blur(8px);
+            display: flex; align-items: center; justify-content: center; z-index: 100;
+            opacity: 1; transition: opacity 0.3s;
+        }
+        .modal.hidden { opacity: 0; pointer-events: none; }
+        
+        .card { 
+            background: rgba(30, 41, 59, 0.95); padding: 40px; border-radius: 24px; 
+            border: 1px solid rgba(255,255,255,0.1); text-align: center;
+            box-shadow: 0 25px 50px rgba(0,0,0,0.5);
+            transform: scale(1); transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+            max-width: 90%; width: 360px;
+        }
+        .modal.hidden .card { transform: scale(0.9); }
+        
+        h1 { font-size: 2.5rem; margin-bottom: 8px; background: linear-gradient(to right, #fff, var(--accent)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        p { opacity: 0.7; margin-bottom: 25px; line-height: 1.6; font-size: 0.95rem; }
+        
+        .btn { 
+            background: var(--accent); color: #0f172a; border: none; 
+            padding: 14px 35px; font-size: 1.1rem; font-weight: 800; 
+            border-radius: 12px; cursor: pointer; letter-spacing: 0.5px;
+            transition: all 0.2s; box-shadow: 0 4px 15px rgba(251, 191, 36, 0.3);
+        }
+        .btn:hover { transform: translateY(-2px); box-shadow: 0 8px 25px rgba(251, 191, 36, 0.4); }
+        .btn:active { transform: scale(0.97); }
+
+        .tutorial-keys { display: flex; gap: 10px; justify-content: center; margin-bottom: 20px; }
+        .key-hint { background: var(--glass); padding: 8px 12px; border-radius: 8px; font-size: 0.8rem; border: 1px solid rgba(255,255,255,0.1); }
+
+        @media (max-width: 600px) {
+            h1 { font-size: 2rem; }
+            .stat-card { padding: 8px 12px; min-width: 70px; }
+            .stat-val { font-size: 1.3rem; }
+            .stability-container { width: 120px; }
+        }
+    </style>
+</head>
+<body>
+
+<canvas id="gameCanvas"></canvas>
+
+<div class="ui-layer">
+    <div class="top-bar">
+        <div class="stat-card">
+            <span class="stat-label">Altura</span>
+            <span class="stat-val" id="scoreVal">0m</span>
+        </div>
+        
+        <div class="stat-card stability-container">
+            <span class="stat-label">Estabilidad</span>
+            <div class="stab-bar"><div class="stab-fill" id="stabFill"></div></div>
+            <div class="wind-indicator">
+                Viento: <span id="windVal">→ 0</span>
+            </div>
+        </div>
+        
+        <div class="stat-card">
+            <span class="stat-label">Puntos</span>
+            <span class="stat-val" id="pointsVal">0</span>
+        </div>
+    </div>
+</div>
+
+<!-- Start Screen -->
+<div id="startScreen" class="modal">
+    <div class="card">
+        <h1>SKY CITY</h1>
+        <p>Construye la ciudad flotante más alta de la historia.<br>Compensa el viento y mantén el equilibrio.</p>
+        <div class="tutorial-keys">
+            <div class="key-hint">🖱️ Click / Toque para soltar</div>
+            <div class="key-hint">💨 Cuidado con el viento</div>
+        </div>
+        <button class="btn" onclick="startGame()">CONSTRUIR</button>
+    </div>
+</div>
+
+<!-- Game Over Screen -->
+<div id="gameOverScreen" class="modal hidden">
+    <div class="card">
+        <h1 style="-webkit-text-fill-color: var(--danger);">COLAPSO</h1>
+        <p id="finalMsg">Tu ciudad se desmoronó.</p>
+        <div style="display:flex; gap:10px; justify-content:center; margin-bottom:20px;">
+            <div class="stat-card"><span class="stat-label">Altura</span><span class="stat-val" id="endHeight">0m</span></div>
+            <div class="stat-card"><span class="stat-label">Puntos</span><span class="stat-val" id="endPoints">0</span></div>
+        </div>
+        <button class="btn" onclick="resetGame()">RECONSTRUIR</button>
+    </div>
+</div>
+
+<script>
+/**
+ * SKY CITY: ARCHITECT EDITION
+ * Motor de física mejorado con viento, tipos de bloques y audio procedural
+ */
+
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+let W, H;
+
+const $ = id => document.getElementById(id);
+const ui = {
+    startScreen: $('startScreen'),
+    gameOverScreen: $('gameOverScreen'),
+    scoreVal: $('scoreVal'),
+    pointsVal: $('pointsVal'),
+    stabFill: $('stabFill'),
+    windVal: $('windVal'),
+    endHeight: $('endHeight'),
+    endPoints: $('endPoints'),
+    finalMsg: $('finalMsg')
+};
+
+const CFG = {
+    gravity: 0.45,
+    friction: 0.86,
+    bounce: 0.06,
+    spawnSpeedBase: 2.8,
+    windMax: 0.14,
+    colors: ['#475569', '#64748b', '#94a3b8', '#334155'],
+    accentColors: ['#fbbf24', '#38bdf8', '#a78bfa', '#fb7185']
+};
+
+const state = {
+    active: false,
+    blocks: [],
+    current: null,
+    cameraY: 0,
+    targetCameraY: 0,
+    stability: 100,
+    score: 0,
+    points: 0,
+    particles: [],
+    clouds: [],
+    wind: 0,
+    windTarget: 0,
+    shake: 0,
+    combo: 0
+};
+
+const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+const lerp = (current, target, amount) => current + (target - current) * amount;
+const randomRange = (min, max) => min + Math.random() * (max - min);
+
+const AudioSys = {
+    ctx: null,
+    init() {
+        if (this.ctx) return;
+        try {
+            this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+        } catch (error) {
+            this.ctx = null;
+        }
+    },
+    unlock() {
+        this.init();
+        if (this.ctx && this.ctx.state === 'suspended') {
+            this.ctx.resume();
+        }
+    },
+    play(freq, type, dur, vol = 0.1) {
+        if (!this.ctx) return;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+        gain.gain.setValueAtTime(vol, this.ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + dur);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start();
+        osc.stop(this.ctx.currentTime + dur);
+    },
+    drop() { this.play(320, 'sine', 0.15, 0.1); },
+    land(perfect) {
+        this.play(perfect ? 760 : 220, 'triangle', 0.12, 0.14);
+        if (perfect) setTimeout(() => this.play(1180, 'sine', 0.18, 0.09), 60);
+    },
+    crash() { this.play(90, 'sawtooth', 0.6, 0.18); }
+};
+
+let inputActive = false;
+let audioUnlocked = false;
+
+const onUserGesture = () => {
+    AudioSys.unlock();
+    audioUnlocked = true;
+};
+
+const onInput = event => {
+    if (event && event.target.closest('.modal')) return;
+    if (!state.active || !state.current) return;
+    inputActive = true;
+};
+
+window.addEventListener('pointerdown', onUserGesture, { once: true });
+window.addEventListener('pointerdown', onInput);
+window.addEventListener('keydown', event => {
+    if (event.code === 'Space') onInput(event);
+});
+window.addEventListener('contextmenu', event => event.preventDefault());
+
+function resize() {
+    W = canvas.width = window.innerWidth;
+    H = canvas.height = window.innerHeight;
+}
+window.addEventListener('resize', resize);
+resize();
+
+class Block {
+    constructor(x, y, w, h, type = 'normal') {
+        this.x = x;
+        this.y = y;
+        this.w = w;
+        this.h = h;
+        this.vx = 0;
+        this.vy = 0;
+        this.type = type;
+        this.isStatic = false;
+        this.settled = false;
+        this.angle = 0;
+        this.va = 0;
+        this.dropped = false;
+
+        this.mass = (type === 'heavy') ? w * h * 2 : (type === 'light' ? w * h * 0.5 : w * h);
+        this.color = (type === 'gold') ? '#fbbf24' : CFG.colors[Math.floor(Math.random() * CFG.colors.length)];
+        this.accent = CFG.accentColors[Math.floor(Math.random() * CFG.accentColors.length)];
+
+        this.windows = Math.floor(Math.random() * 3) + 1;
+        this.hasAntenna = Math.random() > 0.7;
+        this.hasGarden = Math.random() > 0.8;
+    }
+
+    update() {
+        if (this.isStatic || this.settled) return;
+
+        this.vy += CFG.gravity;
+        this.vx += state.wind * (this.type === 'light' ? 1.8 : (this.type === 'heavy' ? 0.24 : 1));
+
+        this.x += this.vx;
+        this.y += this.vy;
+        this.angle += this.va;
+
+        this.vx *= 0.995;
+        this.va *= 0.96;
+
+        for (const other of state.blocks) {
+            if (other === this) continue;
+            if (this.x < other.x + other.w && this.x + this.w > other.x &&
+                this.y + this.h >= other.y && this.y + this.h <= other.y + 32 && this.vy >= 0) {
+
+                this.y = other.y - this.h;
+                this.vy = -this.vy * CFG.bounce;
+                this.vx *= CFG.friction;
+
+                const centerDiff = Math.abs((this.x + this.w / 2) - (other.x + other.w / 2));
+                const perfect = centerDiff < 10;
+                const impact = Math.abs(this.vy) + Math.abs(this.vx);
+
+                if (impact > 1) {
+                    const instability = (centerDiff / other.w) * impact * 2.2;
+                    state.stability -= instability;
+                    state.shake = Math.min(18, impact * 2.2);
+                    if (!other.isStatic) {
+                        other.vx += this.vx * 0.05;
+                        other.va += randomRange(-0.005, 0.005);
+                    }
+                    spawnParticles(this.x + this.w / 2, this.y + this.h, impact * 2.8, '#fff');
+                }
+
+                if (Math.abs(this.vy) < 0.35 && Math.abs(this.vx) < 0.12) {
+                    this.vy = 0;
+                    this.vx = 0;
+                    this.settled = true;
+                    AudioSys.land(perfect);
+                    const basePoints = (this.type === 'gold') ? 500 : 100;
+                    const multiplier = perfect ? 2 : 1;
+                    state.points += basePoints * multiplier;
+                    state.combo = perfect ? state.combo + 1 : 0;
+                    state.stability = Math.min(100, state.stability + (perfect ? 8 : 2));
+                }
+            }
+        }
+
+        if (this.y > H + state.cameraY + 260) return 'dead';
+    }
+
+    draw(ctx) {
+        ctx.save();
+        ctx.translate(this.x + this.w / 2, this.y + this.h / 2);
+        ctx.rotate(this.angle);
+
+        ctx.fillStyle = 'rgba(0,0,0,0.2)';
+        ctx.fillRect(-this.w / 2 + 5, -this.h / 2 + 5, this.w, this.h);
+
+        ctx.fillStyle = this.color;
+        ctx.fillRect(-this.w / 2, -this.h / 2, this.w, this.h);
+
+        ctx.fillStyle = 'rgba(255,255,255,0.1)';
+        ctx.fillRect(-this.w / 2, -this.h / 2, this.w, 4);
+
+        ctx.fillStyle = this.accent;
+        const winSize = 6;
+        const gap = (this.w - 20) / this.windows;
+        for (let i = 0; i < this.windows; i++) {
+            const wx = -this.w / 2 + 10 + i * gap;
+            ctx.globalAlpha = 0.6 + Math.sin(Date.now() / 500 + i) * 0.2;
+            ctx.fillRect(wx, -this.h / 4, winSize, winSize);
+            ctx.fillRect(wx, this.h / 4 - winSize, winSize, winSize);
+        }
+        ctx.globalAlpha = 1;
+
+        if (this.hasAntenna) {
+            ctx.strokeStyle = '#cbd5e1';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(0, -this.h / 2);
+            ctx.lineTo(0, -this.h / 2 - 15);
+            ctx.stroke();
+            ctx.fillStyle = '#ef4444';
+            ctx.beginPath();
+            ctx.arc(0, -this.h / 2 - 15, 2, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        if (this.hasGarden) {
+            ctx.fillStyle = '#4ade80';
+            ctx.beginPath();
+            ctx.arc(-this.w / 2, this.h / 2, 8, 0, Math.PI * 2);
+            ctx.arc(this.w / 2, this.h / 2, 8, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        if (this.type !== 'normal') {
+            ctx.strokeStyle = this.type === 'gold' ? '#fbbf24' : (this.type === 'heavy' ? '#94a3b8' : '#38bdf8');
+            ctx.lineWidth = 2;
+            ctx.strokeRect(-this.w / 2, -this.h / 2, this.w, this.h);
+        }
+
+        ctx.restore();
+    }
+}
+
+function startGame() {
+    if (!audioUnlocked) AudioSys.unlock();
+    ui.startScreen.classList.add('hidden');
+    resetGame();
+}
+
+function resetGame() {
+    state.blocks = [];
+    state.particles = [];
+    state.score = 0;
+    state.points = 0;
+    state.stability = 100;
+    state.cameraY = 0;
+    state.targetCameraY = 0;
+    state.wind = 0;
+    state.windTarget = 0;
+    state.shake = 0;
+    state.combo = 0;
+    state.active = true;
+
+    const base = new Block(W / 2 - 180, H - 90, 360, 90, 'heavy');
+    base.isStatic = true;
+    base.settled = true;
+    state.blocks.push(base);
+
+    state.clouds = Array.from({ length: 20 }, () => ({
+        x: randomRange(0, W),
+        y: randomRange(0, H),
+        s: 0.3 + Math.random() * 0.7,
+        speed: 0.1 + Math.random() * 0.3,
+        opacity: 0.05 + Math.random() * 0.1
+    }));
+
+    spawnNextBlock();
+    ui.gameOverScreen.classList.add('hidden');
+    loop();
+}
+
+function spawnNextBlock() {
+    const r = Math.random();
+    let type = 'normal';
+    if (r > 0.92) type = 'gold';
+    else if (r > 0.76) type = 'heavy';
+    else if (r > 0.58) type = 'light';
+
+    const w = type === 'heavy' ? 90 + Math.random() * 30 : type === 'light' ? 50 + Math.random() * 20 : 60 + Math.random() * 40;
+    const h = 40 + Math.random() * 30;
+
+    const highestY = state.blocks.length > 0 ? Math.min(...state.blocks.map(b => b.y)) : H - 80;
+    const spawnY = Math.max(120, highestY - 220);
+    const spawnX = clamp(W / 2 - w / 2 + randomRange(-120, 120), 20, W - w - 20);
+
+    state.current = new Block(spawnX, spawnY, w, h, type);
+    state.current.vx = (Math.random() > 0.5 ? 1 : -1) * (CFG.spawnSpeedBase + state.score / 420);
+
+    state.windTarget = randomRange(-CFG.windMax, CFG.windMax);
+    inputActive = false;
+}
+
+function gameOver() {
+    state.active = false;
+    AudioSys.crash();
+    ui.endHeight.innerText = state.score + 'm';
+    ui.endPoints.innerText = state.points;
+    ui.finalMsg.innerText = state.stability <= 0 ? 'La estructura perdió integridad.' : 'Un bloque crítico se perdió en el vacío.';
+    ui.gameOverScreen.classList.remove('hidden');
+}
+
+function update() {
+    if (!state.active) return;
+
+    state.wind = lerp(state.wind, state.windTarget, 0.025);
+
+    if (state.current) {
+        if (inputActive) {
+            state.current.dropped = true;
+            state.current.vx += state.wind * 4;
+            state.current.vy = 5;
+            state.blocks.push(state.current);
+            state.current = null;
+            AudioSys.drop();
+            inputActive = false;
+        } else {
+            state.current.x += state.current.vx;
+            if (state.current.x < 0 || state.current.x + state.current.w > W) {
+                if (state.current.x < 0) state.current.x = 0;
+                if (state.current.x + state.current.w > W) state.current.x = W - state.current.w;
+                state.current.vx *= -1;
+            }
+        }
+    } else {
+        const moving = state.blocks.some(b => !b.settled && !b.isStatic);
+        if (!moving) spawnNextBlock();
+    }
+
+    for (let i = state.blocks.length - 1; i >= 0; i--) {
+        const result = state.blocks[i].update();
+        if (result === 'dead') {
+            state.blocks.splice(i, 1);
+            state.stability -= 28;
+            state.shake = 22;
+            AudioSys.crash();
+        }
+    }
+
+    const highest = state.blocks.length > 0 ? Math.min(...state.blocks.map(b => b.y)) : H;
+    state.targetCameraY = Math.max(0, -(highest - H * 0.62));
+    state.cameraY = lerp(state.cameraY, state.targetCameraY, 0.09);
+
+    if (state.shake > 0) state.shake *= 0.91;
+    if (state.shake < 0.5) state.shake = 0;
+
+    state.score = Math.max(state.score, Math.floor(Math.abs(Math.min(0, state.cameraY)) / 10));
+
+    if (state.stability <= 0) {
+        gameOver();
+        return;
+    }
+
+    state.particles.forEach(p => {
+        p.x += p.vx;
+        p.y += p.vy;
+        p.vy += 0.12;
+        p.life -= 0.028;
+    });
+    state.particles = state.particles.filter(p => p.life > 0);
+
+    updateUI();
+}
+
+function spawnParticles(x, y, count, color) {
+    for (let i = 0; i < count; i++) {
+        state.particles.push({
+            x,
+            y,
+            vx: randomRange(-3, 3),
+            vy: randomRange(-5, 1),
+            life: 1,
+            color,
+            size: randomRange(1.2, 3.4)
+        });
+    }
+}
+
+function updateUI() {
+    ui.scoreVal.innerText = state.score + 'm';
+    ui.pointsVal.innerText = state.points;
+    ui.stabFill.style.width = clamp(state.stability, 0, 100) + '%';
+    ui.stabFill.style.background = state.stability < 30 ? 'var(--danger)' : '';
+    const windStr = Math.abs(state.wind * 100).toFixed(0);
+    const arrow = state.wind > 0.01 ? '→' : state.wind < -0.01 ? '←' : '•';
+    ui.windVal.innerText = `${arrow} ${windStr}`;
+    ui.windVal.style.color = Math.abs(state.wind) > 0.09 ? 'var(--accent)' : 'inherit';
+}
+
+function draw() {
+    ctx.clearRect(0, 0, W, H);
+
+    state.clouds.forEach(c => {
+        c.x += c.speed + state.wind * 2.2;
+        if (c.x > W + 60) c.x = -60;
+        if (c.x < -60) c.x = W + 60;
+        ctx.fillStyle = `rgba(255,255,255,${c.opacity})`;
+        ctx.beginPath();
+        ctx.arc(c.x, c.y, 40 * c.s, 0, Math.PI * 2);
+        ctx.fill();
+    });
+
+    const sx = randomRange(-0.5, 0.5) * state.shake;
+    const sy = randomRange(-0.5, 0.5) * state.shake;
+    ctx.save();
+    ctx.translate(sx, state.cameraY + sy);
+
+    if (state.current && !state.current.dropped) {
+        const guideX = state.current.x + state.current.w / 2;
+        ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+        ctx.setLineDash([5, 10]);
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(guideX, state.current.y + state.current.h);
+        ctx.lineTo(guideX, H + state.cameraY);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle = 'rgba(255,255,255,0.06)';
+        ctx.fillRect(state.current.x, state.current.y, state.current.w, H + state.cameraY - state.current.y);
+    }
+
+    state.blocks.forEach(block => block.draw(ctx));
+    if (state.current) state.current.draw(ctx);
+
+    state.particles.forEach(p => {
+        ctx.globalAlpha = p.life;
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        ctx.fill();
+    });
+    ctx.globalAlpha = 1;
+
+    ctx.restore();
+}
+
+function loop() {
+    update();
+    draw();
+    if (state.active) requestAnimationFrame(loop);
+}
+
+draw();
+</script>
+</body>
+</html>

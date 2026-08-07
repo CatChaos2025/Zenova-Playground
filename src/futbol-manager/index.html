@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Fútbol Manager</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="contenedor">
+        <div class="header">
+            <h1>⚽ FÚTBOL MANAGER</h1>
+            <div class="stats-bar">
+                <div class="stat">💰 <span id="dinero">1000</span></div>
+                <div class="stat">🏆 Liga: <span id="liga">1</span></div>
+                <div class="stat">⭐ Poder: <span id="poder">50</span></div>
+            </div>
+        </div>
+        
+        <div class="menu-principal" id="menuPrincipal">
+            <button onclick="mostrarPantalla('plantilla')">👥 Mi Plantilla</button>
+            <button onclick="mostrarPantalla('mercado')">🛒 Mercado</button>
+            <button onclick="mostrarPantalla('entrenamiento')">🏋️ Entrenamiento</button>
+            <button onclick="jugarPartido()">⚽ Jugar Partido</button>
+        </div>
+        
+        <div class="pantalla oculto" id="pantallaPlantilla">
+            <h2>Mi Plantilla</h2>
+            <div id="listaJugadores"></div>
+            <button onclick="mostrarPantalla('menu')">← Volver</button>
+        </div>
+        
+        <div class="pantalla oculto" id="pantallaMercado">
+            <h2>Mercado de Fichajes</h2>
+            <div id="listaMercado"></div>
+            <button onclick="mostrarPantalla('menu')">← Volver</button>
+        </div>
+        
+        <div class="pantalla oculto" id="pantallaEntrenamiento">
+            <h2>Entrenamiento</h2>
+            <p>Costo: 100💰 por sesión</p>
+            <button onclick="entrenar()">Entrenar Equipo (+5 Poder)</button>
+            <button onclick="mostrarPantalla('menu')">← Volver</button>
+        </div>
+        
+        <div class="pantalla oculto" id="pantallaPartido">
+            <h2 id="tituloPartido">Partido</h2>
+            <div class="marcador">
+                <div class="equipo">
+                    <h3>TU EQUIPO</h3>
+                    <div class="goles" id="golesTu">0</div>
+                </div>
+                <div class="vs">VS</div>
+                <div class="equipo">
+                    <h3 id="nombreRival">RIVAL</h3>
+                    <div class="goles" id="golesRival">0</div>
+                </div>
+            </div>
+            <div id="logPartido"></div>
+            <button id="btnSiguiente" class="oculto" onclick="finalizarPartido()">Continuar</button>
+        </div>
+        
+        <canvas id="gameCanvas" width="600" height="400"></canvas>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>

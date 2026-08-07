@@ -1,0 +1,1218 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Arcane Arena: Duelo de Hechiceros</title>
+    <style>
+        :root {
+            --p1: #4ecdc4;
+            --p2: #ff6b6b;
+            --bg: #0a0a14;
+            --ui-bg: rgba(10, 10, 20, 0.85);
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; user-select: none; }
+        
+        body {
+            background: var(--bg);
+            overflow: hidden;
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            color: white;
+            height: 100vh;
+        }
+
+        canvas { display: block; cursor: crosshair; }
+
+        /* HUD */
+        .hud { position: absolute; top: 0; left: 0; right: 0; padding: 20px; pointer-events: none; z-index: 10; }
+        
+        .hp-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; }
+        
+        .player-panel { flex: 1; max-width: 350px; }
+        .player-panel.right { text-align: right; }
+        .player-panel.right .bar-container { transform: scaleX(-1); }
+        .player-panel.right .bar-container > * { transform: scaleX(-1); }
+        
+        .p-name { font-weight: 900; font-size: 1rem; margin-bottom: 5px; letter-spacing: 1px; }
+        .p1-name { color: var(--p1); }
+        .p2-name { color: var(--p2); }
+        
+        .bar-container { 
+            background: rgba(255,255,255,0.1); border-radius: 6px; 
+            overflow: hidden; margin-bottom: 4px; border: 1px solid rgba(255,255,255,0.15);
+        }
+        .hp-bar { height: 16px; background: linear-gradient(90deg, #ff4757, #ff6b81); width: 100%; transition: width 0.2s; }
+        .mp-bar { height: 8px; background: linear-gradient(90deg, #3742fa, #70a1ff); width: 100%; transition: width 0.1s; }
+        .p2-panel .hp-bar { background: linear-gradient(90deg, #ff6b81, #ff4757); }
+        
+        /* Selector de hechizos (solo visible vs IA) */
+        .spell-bar {
+            position: absolute; bottom: 100px; left: 50%; transform: translateX(-50%);
+            display: flex; gap: 10px; pointer-events: none;
+        }
+        .spell-slot {
+            background: var(--ui-bg); backdrop-filter: blur(10px);
+            border: 2px solid rgba(255,255,255,0.2); border-radius: 18px;
+            width: 70px; height: 70px; display: flex; flex-direction: column;
+            align-items: center; justify-content: center; position: relative;
+            transition: transform 0.15s, border-color 0.15s, box-shadow 0.15s;
+        }
+        .spell-slot:hover {
+            transform: translateY(-2px);
+            border-color: rgba(255,255,255,0.35);
+        }
+        .spell-info {
+            position: absolute; bottom: 28px; left: 50%; transform: translateX(-50%);
+            color: #ddd; font-size: 0.95rem; letter-spacing: 0.8px; text-align: center;
+            background: rgba(10,10,20,0.95); border: 1px solid rgba(255,255,255,0.12);
+            padding: 10px 18px; border-radius: 999px; box-shadow: 0 0 30px rgba(0,0,0,0.25);
+            pointer-events: none;
+            max-width: 95vw;
+        }
+        .hud .stat-row {
+            display: flex; justify-content: space-between; gap: 10px; font-size: 0.8rem; color: #ccc;
+            margin-bottom: 12px;
+        }
+        .hud .stat-row span { display: inline-flex; gap: 5px; align-items: center; }
+        .spell-slot.active { border-color: #ffd60a; box-shadow: 0 0 24px rgba(255,214,10,0.45); transform: translateY(-6px); }
+        .spell-icon { font-size: 1.7rem; }
+        .spell-key {
+            position: absolute; top: 8px; right: 8px;
+            width: 24px; height: 24px; display: flex; align-items: center; justify-content: center;
+            background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.2);
+            border-radius: 999px; color: #fff; font-size: 0.75rem; font-weight: 800;
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.2);
+        }
+        .spell-cd {
+            position: absolute; bottom: 0; left: 0; right: 0;
+            background: rgba(255,255,255,0.12); height: 0%; border-radius: 0 0 16px 16px;
+            transition: height 0.1s;
+        }
+
+        /* Aviso central */
+        .center-msg {
+            position: absolute; top: 40%; left: 50%; transform: translate(-50%,-50%);
+            font-size: 3rem; font-weight: 900; pointer-events: none;
+            opacity: 0; z-index: 50; text-shadow: 0 0 30px currentColor;
+            font-style: italic; letter-spacing: 2px;
+        }
+        .center-msg.show { animation: slamIn 1.2s ease-out forwards; }
+        @keyframes slamIn {
+            0% { opacity: 0; transform: translate(-50%,-50%) scale(3); }
+            20% { opacity: 1; transform: translate(-50%,-50%) scale(1); }
+            80% { opacity: 1; }
+            100% { opacity: 0; transform: translate(-50%,-50%) scale(0.9); }
+        }
+
+        /* Modales */
+        .modal { position: absolute; inset: 0; background: rgba(0,0,0,0.85); backdrop-filter: blur(10px); display: flex; align-items: center; justify-content: center; z-index: 100; }
+        .modal.hidden { display: none; }
+        .card {
+            background: linear-gradient(145deg, #1a1a2e, #16213e);
+            padding: 40px 50px; border-radius: 24px; text-align: center;
+            border: 1px solid rgba(255,255,255,0.1); box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+            max-width: 550px; width: 92%;
+        }
+        h1 {
+            font-size: 3rem; margin-bottom: 8px; letter-spacing: 3px;
+            background: linear-gradient(to right, var(--p1), #ffd60a, var(--p2));
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+        }
+        .subtitle { color: #aaa; margin-bottom: 25px; font-style: italic; }
+        
+        .mode-select { display: flex; gap: 12px; justify-content: center; margin-bottom: 25px; }
+        .mode-btn {
+            background: rgba(255,255,255,0.05); border: 2px solid rgba(255,255,255,0.15);
+            padding: 15px 20px; border-radius: 12px; cursor: pointer; color: white;
+            transition: all 0.2s; flex: 1;
+        }
+        .mode-btn:hover { background: rgba(255,255,255,0.1); }
+        .mode-btn.active { border-color: #ffd60a; background: rgba(255,214,10,0.1); box-shadow: 0 0 20px rgba(255,214,10,0.2); }
+        .mode-btn .icon { font-size: 2rem; display: block; margin-bottom: 5px; }
+        .mode-btn .label { font-weight: bold; }
+        
+        .controls-box {
+            background: rgba(0,0,0,0.3); border-radius: 12px; padding: 15px;
+            margin-bottom: 25px; text-align: left; font-size: 0.85rem; line-height: 1.8;
+        }
+        kbd { background: rgba(255,255,255,0.15); padding: 2px 8px; border-radius: 4px; font-family: monospace; font-weight: bold; font-size: 0.8rem; }
+        
+        button.primary {
+            background: linear-gradient(135deg, #7b2ff7, #f107a3);
+            color: white; border: none; padding: 16px 50px; font-size: 1.2rem;
+            font-weight: 900; border-radius: 12px; cursor: pointer;
+            letter-spacing: 2px; transition: all 0.2s;
+            box-shadow: 0 5px 25px rgba(241,7,163,0.3);
+        }
+        button.primary:hover { transform: translateY(-3px); box-shadow: 0 10px 35px rgba(241,7,163,0.5); }
+        
+        .winner-display { font-size: 4rem; margin-bottom: 10px; }
+        #winText { font-size: 2rem; font-weight: 900; margin-bottom: 20px; }
+    </style>
+</head>
+<body>
+
+<canvas id="game"></canvas>
+
+<!-- HUD -->
+<div class="hud">
+    <div class="hp-row">
+        <div class="player-panel">
+            <div class="p-name p1-name">🧙 HECHICERO AZUL</div>
+            <div class="stat-row"><span>HP <strong id="hp1Val">100</strong></span><span>MP <strong id="mp1Val">100</strong></span></div>
+            <div class="bar-container"><div class="hp-bar" id="hp1"></div></div>
+            <div class="bar-container"><div class="mp-bar" id="mp1"></div></div>
+        </div>
+        <div class="player-panel right p2-panel">
+            <div class="p-name p2-name" id="p2name">🧙 HECHICERO ROJO</div>
+            <div class="stat-row"><span>HP <strong id="hp2Val">100</strong></span><span>MP <strong id="mp2Val">100</strong></span></div>
+            <div class="bar-container"><div class="hp-bar" id="hp2"></div></div>
+            <div class="bar-container"><div class="mp-bar" id="mp2"></div></div>
+        </div>
+    </div>
+</div>
+
+<!-- Barra de hechizos -->
+<div class="spell-bar" id="spellBar">
+    <div class="spell-slot active" id="slot0">
+        <span class="spell-key">1</span>
+        <span class="spell-icon">🔥</span>
+        <div class="spell-cd" id="cd0"></div>
+    </div>
+    <div class="spell-slot" id="slot1">
+        <span class="spell-key">2</span>
+        <span class="spell-icon">❄️</span>
+        <div class="spell-cd" id="cd1"></div>
+    </div>
+    <div class="spell-slot" id="slot2">
+        <span class="spell-key">3</span>
+        <span class="spell-icon">⚡</span>
+        <div class="spell-cd" id="cd2"></div>
+    </div>
+</div>
+<div class="spell-info" id="spellInfo">Selecciona un hechizo y comienza el duelo</div>
+
+<div class="center-msg" id="centerMsg"></div>
+
+<!-- Pantalla de inicio -->
+<div id="startScreen" class="modal">
+    <div class="card">
+        <h1>ARCANE ARENA</h1>
+        <p class="subtitle">Duelo de Hechiceros</p>
+        
+        <div class="mode-select">
+            <div class="mode-btn active" id="btnAI">
+                <span class="icon">🤖</span>
+                <span class="label">vs IA</span>
+            </div>
+            <div class="mode-btn" id="btn2P">
+                <span class="icon">👥</span>
+                <span class="label">2 Jugadores</span>
+            </div>
+        </div>
+        
+        <div class="controls-box" id="controlsInfo">
+            <b>Tus controles:</b><br>
+            <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> Mover · <kbd>Ratón</kbd> Apuntar<br>
+            <kbd>Click</kbd> Lanzar · <kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> Cambiar hechizo · <kbd>Q</kbd><kbd>E</kbd> Rotar hechizo<br>
+            <kbd>Shift</kbd> Dash · <kbd>Espacio</kbd> Escudo mágico · <kbd>R</kbd> Reiniciar
+        </div>
+        
+        <button class="primary" id="startBtn">⚔️ DUELAR</button>
+    </div>
+</div>
+
+<!-- Pantalla de fin -->
+<div id="endScreen" class="modal hidden">
+    <div class="card">
+        <div class="winner-display" id="winIcon">🏆</div>
+        <div id="winText">¡VICTORIA!</div>
+        <p class="subtitle" id="winSub"></p>
+        <button class="primary" id="againBtn">🔄 REVANCHA</button>
+    </div>
+</div>
+
+<script>
+/**
+ * ARCANE ARENA: Duelo de Hechiceros
+ * Motor de combate mágico con IA táctica, partículas y efectos
+ */
+
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+let W, H, CENTER, ARENA_R;
+
+// === DEFINICIÓN DE HECHIZOS ===
+const SPELLS = [
+    { id: 'fire', name: 'FUEGO', icon: '🔥', color: '#ff6b35', glow: '#ff9f1c', cost: 12, damage: 16, speed: 10, cooldown: 450, radius: 9, count: 1 },
+    { id: 'ice', name: 'HIELO', icon: '❄️', color: '#4ecdc4', glow: '#a8e6ff', cost: 18, damage: 8, speed: 7, cooldown: 800, radius: 11, slow: true, count: 3 },
+    { id: 'lightning', name: 'RAYO', icon: '⚡', color: '#ffd60a', glow: '#fff3b0', cost: 35, damage: 30, cooldown: 1800, instant: true, telegraph: 400 }
+];
+
+// === CONFIGURACIÓN ===
+const CFG = {
+    playerRadius: 18,
+    baseSpeed: 3.2,
+    maxHP: 100,
+    maxMP: 100,
+    mpRegen: 0.35,
+    dashSpeed: 14,
+    dashDuration: 150,
+    dashCooldown: 1200,
+    shieldDrain: 0.8, // maná por frame
+    shieldColor: 'rgba(120, 200, 255, 0.3)'
+};
+
+// === ESTADO ===
+const state = {
+    mode: 'ai', // 'ai' o '2p'
+    active: false,
+    projectiles: [],
+    particles: [],
+    lightnings: [],
+    shake: 0,
+    time: 0,
+    runes: [],
+    ambient: []
+};
+
+// === JUGADORES ===
+function createPlayer(x, y, color, glow, facing) {
+    return {
+        x, y, vx: 0, vy: 0,
+        color, glow,
+        hp: CFG.maxHP, mp: CFG.maxMP,
+        facing, // ángulo
+        selectedSpell: 0,
+        cooldowns: [0, 0, 0],
+        dashTimer: 0, dashCooldown: 0, dashDir: { x: 0, y: 0 },
+        shield: false,
+        slowTimer: 0,
+        hitFlash: 0,
+        alive: true
+    };
+}
+
+let P1, P2;
+
+// === INPUT ===
+const keys = {};
+const mouse = { x: 0, y: 0, down: false, clicked: false };
+
+window.addEventListener('keydown', e => {
+    keys[e.code] = true;
+    if (['Space','KeyW','KeyA','KeyS','KeyD','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)) e.preventDefault();
+    
+    // Selección de hechizo (solo P1)
+    if (e.code === 'Digit1') selectSpell(0);
+    if (e.code === 'Digit2') selectSpell(1);
+    if (e.code === 'Digit3') selectSpell(2);
+    if (e.code === 'KeyQ') selectSpell((P1?.selectedSpell + 2) % 3);
+    if (e.code === 'KeyE') selectSpell((P1?.selectedSpell + 1) % 3);
+
+    // Selección de hechizo P2 en modo 2p
+    if (state.mode === '2p') {
+        if (e.code === 'Numpad1' || e.code === 'KeyH') selectSpell2(0);
+        if (e.code === 'Numpad2' || e.code === 'KeyJ') selectSpell2(1);
+        if (e.code === 'Numpad3' || e.code === 'KeyK') selectSpell2(2);
+    }
+});
+window.addEventListener('keyup', e => {
+    keys[e.code] = false;
+    if (e.code === 'KeyR' && !state.active) {
+        document.getElementById('endScreen').classList.add('hidden');
+        startDuel();
+    }
+});
+window.addEventListener('mousemove', e => { mouse.x = e.clientX; mouse.y = e.clientY; });
+window.addEventListener('mousedown', e => { if (e.button === 0) { mouse.down = true; mouse.clicked = true; } });
+window.addEventListener('mouseup', e => { if (e.button === 0) mouse.down = false; });
+window.addEventListener('contextmenu', e => e.preventDefault());
+
+// === RESIZE ===
+function resize() {
+    W = canvas.width = window.innerWidth;
+    H = canvas.height = window.innerHeight;
+    CENTER = { x: W / 2, y: H / 2 };
+    ARENA_R = Math.min(W, H) * 0.42;
+}
+window.addEventListener('resize', resize);
+resize();
+
+// === AUDIO PROCEDURAL ===
+const Audio = {
+    ctx: null,
+    init() { try { this.ctx = new (window.AudioContext || window.webkitAudioContext)(); } catch(e){} },
+    beep(f, type, dur, vol = 0.1) {
+        if (!this.ctx) return;
+        try {
+            const o = this.ctx.createOscillator(), g = this.ctx.createGain();
+            o.type = type; o.frequency.setValueAtTime(f, this.ctx.currentTime);
+            o.connect(g); g.connect(this.ctx.destination);
+            g.gain.setValueAtTime(vol, this.ctx.currentTime);
+            g.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + dur);
+            o.start(); o.stop(this.ctx.currentTime + dur);
+        } catch(e){}
+    },
+    castFire() { this.beep(300, 'sawtooth', 0.15, 0.08); },
+    castIce() { this.beep(800, 'sine', 0.2, 0.08); this.beep(1200, 'sine', 0.25, 0.05); },
+    castLightning() { this.beep(100, 'sawtooth', 0.3, 0.12); this.beep(2000, 'square', 0.1, 0.08); },
+    hit() { this.beep(150, 'square', 0.1, 0.1); },
+    dash() { this.beep(400, 'sine', 0.1, 0.06); },
+    shield() { this.beep(600, 'sine', 0.3, 0.04); },
+    death() { this.beep(200, 'sawtooth', 0.3, 0.15); this.beep(100, 'sawtooth', 0.6, 0.1); }
+};
+
+// === UI HELPERS ===
+function selectSpell(i) {
+    if (!P1) return;
+    P1.selectedSpell = i;
+    document.querySelectorAll('.spell-slot').forEach((s, idx) => {
+        s.classList.toggle('active', idx === i);
+    });
+    updateSpellInfo();
+}
+
+function selectSpell2(i) {
+    if (!P2) return;
+    P2.selectedSpell = i;
+    updateSpellInfo();
+}
+
+function updateSpellInfo() {
+    const info = document.getElementById('spellInfo');
+    if (!P1) return;
+    const active = SPELLS[P1.selectedSpell];
+    let text = `P1: ${active.icon} ${active.name} · Coste ${active.cost} MP`;
+    if (state.mode === '2p' && P2) {
+        const active2 = SPELLS[P2.selectedSpell];
+        text += ` · P2: ${active2.icon} ${active2.name} · Coste ${active2.cost} MP`;
+    }
+    info.innerText = text;
+}
+
+function showCenterMsg(text, color) {
+    const el = document.getElementById('centerMsg');
+    el.innerText = text;
+    el.style.color = color;
+    el.classList.remove('show');
+    void el.offsetWidth; // forzar reflow
+    el.classList.add('show');
+}
+
+// === MODOS DE JUEGO ===
+document.getElementById('btnAI').addEventListener('click', () => {
+    state.mode = 'ai';
+    document.getElementById('btnAI').classList.add('active');
+    document.getElementById('btn2P').classList.remove('active');
+    document.getElementById('controlsInfo').innerHTML = `
+        <b>Tus controles:</b><br>
+        <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> Mover · <kbd>Ratón</kbd> Apuntar<br>
+        <kbd>Click</kbd> Lanzar hechizo · <kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> Cambiar hechizo · <kbd>Q</kbd><kbd>E</kbd> Rotar hechizo<br>
+        <kbd>Shift</kbd> Dash · <kbd>Espacio</kbd> Escudo mágico · <kbd>R</kbd> Reiniciar
+    `;
+});
+
+document.getElementById('btn2P').addEventListener('click', () => {
+    state.mode = '2p';
+    document.getElementById('btn2P').classList.add('active');
+    document.getElementById('btnAI').classList.remove('active');
+    document.getElementById('controlsInfo').innerHTML = `
+        <b style="color:var(--p1)">JUGADOR 1:</b> <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> Mover · <kbd>F</kbd> Lanzar · <kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> Cambiar hechizo<br>
+        <b style="color:var(--p2)">JUGADOR 2:</b> <kbd>↑</kbd><kbd>←</kbd><kbd>↓</kbd><kbd>→</kbd> Mover · <kbd>Enter</kbd> Lanzar · <kbd>H</kbd><kbd>J</kbd><kbd>K</kbd> Cambiar hechizo · <kbd>Ctrl Der</kbd> Dash<br>
+        Ambos: disparan en dirección de movimiento · Escudo automático al quedar quieto · <kbd>R</kbd> Reiniciar
+    `;
+});
+
+document.getElementById('startBtn').addEventListener('click', () => {
+    Audio.init();
+    document.getElementById('startScreen').classList.add('hidden');
+    startDuel();
+});
+
+document.getElementById('againBtn').addEventListener('click', () => {
+    document.getElementById('endScreen').classList.add('hidden');
+    startDuel();
+});
+
+// === INICIO DEL DUELO ===
+function startDuel() {
+    P1 = createPlayer(CENTER.x - ARENA_R * 0.5, CENTER.y, '#4ecdc4', '#a8fff7', 0);
+    P2 = createPlayer(CENTER.x + ARENA_R * 0.5, CENTER.y, '#ff6b6b', '#ffb8b8', Math.PI);
+    
+    state.projectiles = [];
+    state.particles = [];
+    state.lightnings = [];
+    state.active = true;
+    state.time = 0;
+    state.shake = 0;
+    
+    // Runas decorativas
+    state.runes = Array.from({length: 12}, (_, i) => ({
+        angle: (i / 12) * Math.PI * 2,
+        dist: ARENA_R * 0.7,
+        speed: 0.003 + Math.random() * 0.003
+    }));
+    
+    // Partículas ambientales
+    state.ambient = Array.from({length: 40}, () => ({
+        x: Math.random() * W, y: Math.random() * H,
+        vx: (Math.random()-0.5)*0.3, vy: -Math.random()*0.5 - 0.2,
+        size: Math.random() * 2 + 0.5,
+        alpha: Math.random() * 0.4
+    }));
+    
+    // UI
+    P2.selectedSpell = 0;
+    document.getElementById('spellBar').style.display = 'flex';
+    document.getElementById('p2name').innerText = state.mode === 'ai' ? '🤖 IA ARCANA' : '🧙 HECHICERO ROJO';
+    selectSpell(0);
+    updateSpellInfo();
+    
+    showCenterMsg('¡DUELO!', '#ffd60a');
+    
+    lastTime = performance.now();
+    requestAnimationFrame(loop);
+}
+
+// === LANZAMIENTO DE HECHIZOS ===
+function castSpell(caster, target, spellIdx, aimAngle) {
+    const spell = SPELLS[spellIdx];
+    if (caster.cooldowns[spellIdx] > 0 || caster.mp < spell.cost || !caster.alive) return;
+    
+    caster.mp -= spell.cost;
+    caster.cooldowns[spellIdx] = spell.cooldown;
+    
+    // Efecto de lanzamiento
+    spawnBurst(caster.x, caster.y, spell.color, 10);
+    
+    if (spell.instant) {
+        // RAYO: crear telegraph
+        state.lightnings.push({
+            caster, target,
+            angle: aimAngle,
+            timer: spell.telegraph,
+            maxTimer: spell.telegraph,
+            fired: false,
+            damage: spell.damage,
+            color: spell.color
+        });
+        Audio.castLightning();
+    } else {
+        // PROYECTILES
+        if (spell.id === 'ice') {
+            // Hielo: abanico de 3 proyectiles
+            for (let i = -1; i <= 1; i++) {
+                const ang = aimAngle + i * 0.25;
+                state.projectiles.push({
+                    x: caster.x, y: caster.y,
+                    vx: Math.cos(ang) * spell.speed,
+                    vy: Math.sin(ang) * spell.speed,
+                    radius: spell.radius,
+                    damage: spell.damage,
+                    color: spell.color,
+                    glow: spell.glow,
+                    owner: caster,
+                    slow: true,
+                    life: 120
+                });
+            }
+            Audio.castIce();
+        } else {
+            // Fuego: proyectil único
+            state.projectiles.push({
+                x: caster.x, y: caster.y,
+                vx: Math.cos(aimAngle) * spell.speed,
+                vy: Math.sin(aimAngle) * spell.speed,
+                radius: spell.radius,
+                damage: spell.damage,
+                color: spell.color,
+                glow: spell.glow,
+                owner: caster,
+                slow: false,
+                life: 120
+            });
+            Audio.castFire();
+        }
+    }
+}
+
+// === DAÑO ===
+function applyDamage(target, damage, sourceX, sourceY) {
+    if (!target.alive) return;
+    
+    if (target.shield && target.mp > 0) {
+        // Escudo absorbe daño pero consume maná extra
+        target.mp -= damage * 1.2;
+        spawnBurst(target.x, target.y, '#78c8ff', 15);
+        Audio.shield();
+        if (target.mp <= 0) {
+            target.mp = 0;
+            target.shield = false;
+            showCenterMsg('¡ESCUDO ROTO!', '#78c8ff');
+        }
+        return;
+    }
+    
+    target.hp -= damage;
+    target.hitFlash = 8;
+    state.shake = Math.min(15, state.shake + damage * 0.5);
+    Audio.hit();
+    
+    // Knockback
+    const ang = Math.atan2(target.y - sourceY, target.x - sourceX);
+    target.vx += Math.cos(ang) * 3;
+    target.vy += Math.sin(ang) * 3;
+    
+    spawnBurst(target.x, target.y, '#ff0000', 8);
+    
+    if (target.hp <= 0) {
+        target.hp = 0;
+        target.alive = false;
+        spawnBurst(target.x, target.y, target.color, 40);
+        Audio.death();
+        endDuel(target === P1 ? P2 : P1);
+    }
+}
+
+function endDuel(winner) {
+    state.active = false;
+    
+    setTimeout(() => {
+        const isP1 = winner === P1;
+        const winIcon = document.getElementById('winIcon');
+        const winText = document.getElementById('winText');
+        const winSub = document.getElementById('winSub');
+        
+        if (state.mode === 'ai') {
+            if (isP1) {
+                winIcon.innerText = '🏆';
+                winText.innerText = '¡VICTORIA!';
+                winText.style.color = 'var(--p1)';
+                winSub.innerText = 'Has derrotado a la IA Arcana';
+            } else {
+                winIcon.innerText = '💀';
+                winText.innerText = 'DERROTA';
+                winText.style.color = 'var(--p2)';
+                winSub.innerText = 'La IA te ha superado... esta vez';
+            }
+        } else {
+            winIcon.innerText = '🏆';
+            winText.innerText = isP1 ? '¡GANA EL JUGADOR 1!' : '¡GANA EL JUGADOR 2!';
+            winText.style.color = isP1 ? 'var(--p1)' : 'var(--p2)';
+            winSub.innerText = 'Duelo épico de hechicería';
+        }
+        
+        document.getElementById('endScreen').classList.remove('hidden');
+    }, 1000);
+}
+
+// === PARTÍCULAS ===
+function spawnBurst(x, y, color, count) {
+    for (let i = 0; i < count; i++) {
+        const ang = Math.random() * Math.PI * 2;
+        const spd = Math.random() * 5 + 1;
+        state.particles.push({
+            x, y,
+            vx: Math.cos(ang) * spd,
+            vy: Math.sin(ang) * spd,
+            life: 1,
+            color,
+            size: Math.random() * 3 + 1
+        });
+    }
+}
+
+// === ACTUALIZAR JUGADOR (INPUT HUMANO) ===
+function updatePlayer1(dt) {
+    if (!P1.alive) return;
+    
+    let dx = 0, dy = 0;
+    if (keys['KeyW']) dy -= 1;
+    if (keys['KeyS']) dy += 1;
+    if (keys['KeyA']) dx -= 1;
+    if (keys['KeyD']) dx += 1;
+    
+    // Dash
+    if (keys['ShiftLeft'] || keys['ShiftRight']) tryDash(P1, dx, dy);
+    
+    movePlayer(P1, dx, dy, dt);
+    
+    // Apuntar con el ratón
+    P1.facing = Math.atan2(mouse.y - P1.y, mouse.x - P1.x);
+    
+    // Escudo
+    P1.shield = keys['Space'] && P1.mp > 5;
+    
+    // Lanzar con click (solo una vez por pulsación)
+    if (mouse.clicked) {
+        castSpell(P1, P2, P1.selectedSpell, P1.facing);
+        mouse.clicked = false;
+    }
+}
+
+function updatePlayer2(dt) {
+    if (!P2.alive) return;
+    
+    if (state.mode === 'ai') {
+        updateAI(dt);
+    } else {
+        let dx = 0, dy = 0;
+        if (keys['ArrowUp']) dy -= 1;
+        if (keys['ArrowDown']) dy += 1;
+        if (keys['ArrowLeft']) dx -= 1;
+        if (keys['ArrowRight']) dx += 1;
+        
+        if (keys['ControlRight']) tryDash(P2, dx, dy);
+        
+        movePlayer(P2, dx, dy, dt);
+        
+        // El facing sigue la dirección de movimiento
+        if (dx !== 0 || dy !== 0) P2.facing = Math.atan2(dy, dx);
+        
+        // Escudo al estar quieto
+        P2.shield = (dx === 0 && dy === 0) && P2.mp > 10;
+        
+        if (keys['Enter']) castSpell(P2, P1, P2.selectedSpell, P2.facing);
+    }
+}
+
+function movePlayer(p, dx, dy, dt) {
+    const speedMod = p.slowTimer > 0 ? 0.5 : 1;
+    let speed = CFG.baseSpeed * speedMod;
+    
+    // Si está en dash, usar velocidad de dash
+    if (p.dashTimer > 0) {
+        p.x += p.dashDir.x * CFG.dashSpeed * dt * 60;
+        p.y += p.dashDir.y * CFG.dashSpeed * dt * 60;
+        p.dashTimer -= dt * 1000;
+        // Estela del dash
+        if (Math.random() < 0.5) spawnBurst(p.x, p.y, p.color, 2);
+    } else {
+        // Normalizar diagonal
+        if (dx !== 0 || dy !== 0) {
+            const len = Math.sqrt(dx*dx + dy*dy);
+            dx /= len; dy /= len;
+        }
+        p.vx = dx * speed;
+        p.vy = dy * speed;
+        p.x += p.vx * dt * 60;
+        p.y += p.vy * dt * 60;
+    }
+    
+    // Limitar a la arena circular
+    const dx2 = p.x - CENTER.x;
+    const dy2 = p.y - CENTER.y;
+    const dist = Math.sqrt(dx2*dx2 + dy2*dy2);
+    const maxDist = ARENA_R - CFG.playerRadius;
+    
+    if (dist > maxDist) {
+        p.x = CENTER.x + (dx2 / dist) * maxDist;
+        p.y = CENTER.y + (dy2 / dist) * maxDist;
+    }
+}
+
+function tryDash(p, dx, dy) {
+    if (p.dashCooldown > 0 || p.dashTimer > 0) return;
+    if (dx === 0 && dy === 0) { dx = Math.cos(p.facing); dy = Math.sin(p.facing); }
+    const len = Math.sqrt(dx*dx + dy*dy);
+    p.dashDir = { x: dx/len, y: dy/len };
+    p.dashTimer = CFG.dashDuration;
+    p.dashCooldown = CFG.dashCooldown;
+    Audio.dash();
+    spawnBurst(p.x, p.y, p.color, 8);
+}
+
+// === IA TÁCTICA ===
+let aiTimer = 0;
+let aiAction = 'strafe';
+let aiStrafeDir = 1;
+
+function updateAI(dt) {
+    if (!P2.alive) return;
+    
+    const dx = P1.x - P2.x;
+    const dy = P1.y - P2.y;
+    const dist = Math.sqrt(dx*dx + dy*dy);
+    const angleToP1 = Math.atan2(dy, dx);
+    
+    P2.facing = angleToP1;
+    
+    aiTimer -= dt * 1000;
+    
+    // Decidir acción cada cierto tiempo
+    if (aiTimer <= 0) {
+        aiTimer = 500 + Math.random() * 800;
+        
+        if (P2.hp < 30 && Math.random() < 0.5) aiAction = 'retreat';
+        else if (dist > ARENA_R) aiAction = 'approach';
+        else if (Math.random() < 0.3) { aiStrafeDir *= -1; aiAction = 'strafe'; }
+        else aiAction = 'strafe';
+    }
+    
+    // Esquivar proyectiles entrantes
+    let dodging = false;
+    for (let proj of state.projectiles) {
+        if (proj.owner === P2) continue;
+        const pdx = P2.x - proj.x;
+        const pdy = P2.y - proj.y;
+        const pdist = Math.sqrt(pdx*pdx + pdy*pdy);
+        
+        // Si el proyectil se acerca peligrosamente
+        if (pdist < 100) {
+            const projAngle = Math.atan2(proj.vy, proj.vx);
+            const angleToUs = Math.atan2(pdy, pdx);
+            const angleDiff = Math.abs(projAngle - angleToUs);
+            
+            if (angleDiff < 0.8 || angleDiff > Math.PI * 2 - 0.8) {
+                // ¡Nos va a dar! Esquivar perpendicular
+                const perpAngle = projAngle + Math.PI / 2 * (Math.random() < 0.5 ? 1 : -1);
+                tryDash(P2, Math.cos(perpAngle), Math.sin(perpAngle));
+                dodging = true;
+                break;
+            }
+        }
+    }
+    
+    // Esquivar telegraphs de rayo (si P1 fuera IA no aplica, pero por si acaso)
+    
+    if (!dodging) {
+        let mx = 0, my = 0;
+        
+        if (aiAction === 'approach') {
+            mx = dx / dist; my = dy / dist;
+        } else if (aiAction === 'retreat') {
+            mx = -dx / dist; my = -dy / dist;
+        } else { // strafe
+            const perpA = angleToP1 + Math.PI / 2 * aiStrafeDir;
+            mx = Math.cos(perpA); my = Math.sin(perpA);
+            // Mantener distancia media
+            if (dist > ARENA_R * 0.6) { mx += dx/dist * 0.5; my += dy/dist * 0.5; }
+            if (dist < ARENA_R * 0.3) { mx -= dx/dist * 0.5; my -= dy/dist * 0.5; }
+        }
+        
+        movePlayer(P2, mx, my, dt);
+    }
+    
+    // Escudo si tiene poca vida y está lejos
+    P2.shield = (P2.hp < 40 && dist > 200 && P2.mp > 30);
+    
+    // Atacar
+    if (Math.random() < 0.03 && dist < ARENA_R * 1.5) {
+        // Elegir hechizo según situación
+        let spellIdx;
+        if (dist > ARENA_R * 0.7 && P2.mp >= 35 && Math.random() < 0.3) spellIdx = 2; // Rayo lejos
+        else if (dist < 200 && Math.random() < 0.5) spellIdx = 1; // Hielo cerca
+        else spellIdx = 0; // Fuego
+        
+        // Predicción de movimiento
+        const predX = P1.x + P1.vx * 15;
+        const predY = P1.y + P1.vy * 15;
+        const predAngle = Math.atan2(predY - P2.y, predX - P2.x);
+        
+        castSpell(P2, P1, spellIdx, predAngle);
+    }
+}
+
+// === ACTUALIZAR PROYECTILES ===
+function updateProjectiles(dt) {
+    for (let i = state.projectiles.length - 1; i >= 0; i--) {
+        const proj = state.projectiles[i];
+        proj.x += proj.vx * dt * 60;
+        proj.y += proj.vy * dt * 60;
+        proj.life--;
+        
+        // Estela
+        if (Math.random() < 0.4) {
+            state.particles.push({
+                x: proj.x, y: proj.y,
+                vx: (Math.random()-0.5)*2, vy: (Math.random()-0.5)*2,
+                life: 0.6, color: proj.glow, size: proj.radius * 0.5
+            });
+        }
+        
+        // Fuera de arena o vida agotada
+        const dxc = proj.x - CENTER.x;
+        const dyc = proj.y - CENTER.y;
+        if (Math.sqrt(dxc*dxc + dyc*dyc) > ARENA_R + 50 || proj.life <= 0) {
+            spawnBurst(proj.x, proj.y, proj.color, 5);
+            state.projectiles.splice(i, 1);
+            continue;
+        }
+        
+        // Colisión con jugadores
+        const target = proj.owner === P1 ? P2 : P1;
+        if (target.alive) {
+            const dx = target.x - proj.x;
+            const dy = target.y - proj.y;
+            if (Math.sqrt(dx*dx + dy*dy) < CFG.playerRadius + proj.radius) {
+                applyDamage(target, proj.damage, proj.x, proj.y);
+                if (proj.slow) target.slowTimer = 90; // 1.5s de ralentización
+                spawnBurst(proj.x, proj.y, proj.color, 12);
+                state.projectiles.splice(i, 1);
+            }
+        }
+    }
+}
+
+// === ACTUALIZAR RAYOS ===
+function updateLightnings(dt) {
+    for (let i = state.lightnings.length - 1; i >= 0; i--) {
+        const l = state.lightnings[i];
+        l.timer -= dt * 1000;
+        
+        // En el momento exacto, disparar
+        if (l.timer <= 0 && !l.fired) {
+            l.fired = true;
+            state.shake = 10;
+            
+            // Verificar si golpea al objetivo (línea vs círculo)
+            const target = l.caster === P1 ? P2 : P1;
+            if (target.alive) {
+                const dist = lineCircleDist(
+                    l.caster.x, l.caster.y,
+                    l.caster.x + Math.cos(l.angle) * ARENA_R * 3,
+                    l.caster.y + Math.sin(l.angle) * ARENA_R * 3,
+                    target.x, target.y
+                );
+                
+                if (dist < CFG.playerRadius + 15) {
+                    applyDamage(target, l.damage, l.caster.x, l.caster.y);
+                    target.slowTimer = 30; // pequeña pausa por impacto
+                }
+            }
+            
+            // Chispas a lo largo del rayo
+            for (let t = 0; t < 1; t += 0.05) {
+                const px = l.caster.x + Math.cos(l.angle) * ARENA_R * 2 * t;
+                const py = l.caster.y + Math.sin(l.angle) * ARENA_R * 2 * t;
+                spawnBurst(px, py, l.color, 1);
+            }
+        }
+        
+        if (l.timer < -200) state.lightnings.splice(i, 1);
+    }
+}
+
+function lineCircleDist(x1, y1, x2, y2, cx, cy) {
+    const dx = x2 - x1, dy = y2 - y1;
+    const len2 = dx*dx + dy*dy;
+    let t = len2 === 0 ? 0 : ((cx - x1) * dx + (cy - y1) * dy) / len2;
+    t = Math.max(0, Math.min(1, t));
+    const px = x1 + t * dx, py = y1 + t * dy;
+    return Math.sqrt((cx-px)*(cx-px) + (cy-py)*(cy-py));
+}
+
+// === UPDATE PRINCIPAL ===
+let lastTime = 0;
+let shootCooldown1 = 0;
+
+function update(dt) {
+    if (!state.active) return;
+    
+    state.time += dt;
+    
+    updatePlayer1(dt);
+    updatePlayer2(dt);
+    
+    // Limitar rate de disparo del jugador con click mantenido
+    if (P1.cooldowns[P1.selectedSpell] <= 0) {
+        // Ya se maneja en castSpell
+    }
+    
+    // Cooldowns y regeneración
+    [P1, P2].forEach(p => {
+        for (let i = 0; i < 3; i++) {
+            if (p.cooldowns[i] > 0) p.cooldowns[i] -= dt * 1000;
+        }
+        if (p.dashCooldown > 0) p.dashCooldown -= dt * 1000;
+        if (p.slowTimer > 0) p.slowTimer--;
+        if (p.hitFlash > 0) p.hitFlash--;
+        
+        // Regenerar maná (más lento con escudo activo)
+        if (p.shield) {
+            p.mp -= CFG.shieldDrain;
+            if (p.mp <= 0) { p.mp = 0; p.shield = false; }
+        } else {
+            p.mp = Math.min(CFG.maxMP, p.mp + CFG.mpRegen);
+        }
+    });
+    
+    updateProjectiles(dt);
+    updateLightnings(dt);
+    
+    // Partículas
+    state.particles.forEach(p => {
+        p.x += p.vx * dt * 60; p.y += p.vy * dt * 60;
+        p.vx *= 0.96; p.vy *= 0.96;
+        p.life -= 0.02;
+    });
+    state.particles = state.particles.filter(p => p.life > 0);
+    
+    // Ambientales
+    state.ambient.forEach(a => {
+        a.x += a.vx * dt * 60; a.y += a.vy * dt * 60;
+        if (a.y < -10) { a.y = H + 10; a.x = Math.random() * W; }
+    });
+    
+    // Shake
+    if (state.shake > 0) state.shake *= 0.85;
+    if (state.shake < 0.5) state.shake = 0;
+    
+    updateHUD();
+}
+
+function updateHUD() {
+    document.getElementById('hp1').style.width = (P1.hp / CFG.maxHP * 100) + '%';
+    document.getElementById('hp2').style.width = (P2.hp / CFG.maxHP * 100) + '%';
+    document.getElementById('mp1').style.width = (P1.mp / CFG.maxMP * 100) + '%';
+    document.getElementById('mp2').style.width = (P2.mp / CFG.maxMP * 100) + '%';
+    document.getElementById('hp1Val').innerText = `${Math.max(0, Math.round(P1.hp))} / ${CFG.maxHP}`;
+    document.getElementById('mp1Val').innerText = `${Math.max(0, Math.round(P1.mp))} / ${CFG.maxMP}`;
+    document.getElementById('hp2Val').innerText = `${Math.max(0, Math.round(P2.hp))} / ${CFG.maxHP}`;
+    document.getElementById('mp2Val').innerText = `${Math.max(0, Math.round(P2.mp))} / ${CFG.maxMP}`;
+    
+    // Cooldowns visuales (solo modo IA)
+    if (state.mode === 'ai') {
+        for (let i = 0; i < 3; i++) {
+            const pct = Math.max(0, P1.cooldowns[i] / SPELLS[i].cooldown) * 100;
+            document.getElementById('cd' + i).style.height = pct + '%';
+        }
+    }
+}
+
+// === RENDER ===
+function draw() {
+    // Fondo
+    const bgGrad = ctx.createRadialGradient(CENTER.x, CENTER.y, 0, CENTER.x, CENTER.y, ARENA_R * 2);
+    bgGrad.addColorStop(0, '#1a1a2e');
+    bgGrad.addColorStop(1, '#0a0a14');
+    ctx.fillStyle = bgGrad;
+    ctx.fillRect(0, 0, W, H);
+    
+    // Partículas ambientales
+    state.ambient.forEach(a => {
+        ctx.globalAlpha = a.alpha;
+        ctx.fillStyle = '#8888ff';
+        ctx.beginPath();
+        ctx.arc(a.x, a.y, a.size, 0, Math.PI * 2);
+        ctx.fill();
+    });
+    ctx.globalAlpha = 1;
+    
+    const sx = (Math.random()-0.5) * state.shake;
+    const sy = (Math.random()-0.5) * state.shake;
+    
+    ctx.save();
+    ctx.translate(sx, sy);
+    
+    // === ARENA ===
+    // Suelo de la arena
+    const arenaGrad = ctx.createRadialGradient(CENTER.x, CENTER.y, 0, CENTER.x, CENTER.y, ARENA_R);
+    arenaGrad.addColorStop(0, '#2d2d44');
+    arenaGrad.addColorStop(0.8, '#1f1f35');
+    arenaGrad.addColorStop(1, '#16162a');
+    ctx.fillStyle = arenaGrad;
+    ctx.beginPath();
+    ctx.arc(CENTER.x, CENTER.y, ARENA_R, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Borde mágico pulsante
+    const pulse = 0.5 + Math.sin(state.time * 3) * 0.3;
+    ctx.strokeStyle = `rgba(160, 120, 255, ${pulse})`;
+    ctx.lineWidth = 4;
+    ctx.shadowColor = '#a078ff';
+    ctx.shadowBlur = 20;
+    ctx.beginPath();
+    ctx.arc(CENTER.x, CENTER.y, ARENA_R, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+    
+    // Círculo interior
+    ctx.strokeStyle = 'rgba(160, 120, 255, 0.2)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(CENTER.x, CENTER.y, ARENA_R * 0.5, 0, Math.PI * 2);
+    ctx.stroke();
+    
+    // Runas girando
+    state.runes.forEach(r => {
+        r.angle += r.speed;
+        const rx = CENTER.x + Math.cos(r.angle) * r.dist;
+        const ry = CENTER.y + Math.sin(r.angle) * r.dist;
+        ctx.fillStyle = 'rgba(255, 214, 10, 0.4)';
+        ctx.font = '14px serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('✦', rx, ry);
+    });
+    
+    // === RAYOS (telegraphs y disparos) ===
+    state.lightnings.forEach(l => {
+        const endX = l.caster.x + Math.cos(l.angle) * ARENA_R * 3;
+        const endY = l.caster.y + Math.sin(l.angle) * ARENA_R * 3;
+        
+        if (!l.fired) {
+            // Telegraph: línea de advertencia
+            const alpha = 1 - (l.timer / l.maxTimer);
+            ctx.strokeStyle = `rgba(255, 214, 10, ${alpha * 0.6})`;
+            ctx.lineWidth = 2 + alpha * 5;
+            ctx.setLineDash([10, 10]);
+            ctx.beginPath();
+            ctx.moveTo(l.caster.x, l.caster.y);
+            ctx.lineTo(endX, endY);
+            ctx.stroke();
+            ctx.setLineDash([]);
+        } else {
+            // Rayo activo (se desvanece)
+            const fade = Math.max(0, 1 + l.timer / 200);
+            ctx.strokeStyle = `rgba(255, 214, 10, ${fade})`;
+            ctx.lineWidth = 8 * fade;
+            ctx.shadowColor = '#ffd60a';
+            ctx.shadowBlur = 30;
+            
+            // Línea con zigzag
+            ctx.beginPath();
+            ctx.moveTo(l.caster.x, l.caster.y);
+            const steps = 10;
+            for (let i = 1; i <= steps; i++) {
+                const t = i / steps;
+                const offset = (Math.random() - 0.5) * 20 * (1 - t);
+                const px = l.caster.x + (endX - l.caster.x) * t + Math.cos(l.angle + Math.PI/2) * offset;
+                const py = l.caster.y + (endY - l.caster.y) * t + Math.sin(l.angle + Math.PI/2) * offset;
+                ctx.lineTo(px, py);
+            }
+            ctx.stroke();
+            ctx.shadowBlur = 0;
+        }
+    });
+    
+    // === PROYECTILES ===
+    state.projectiles.forEach(proj => {
+        ctx.shadowColor = proj.glow;
+        ctx.shadowBlur = 20;
+        ctx.fillStyle = proj.color;
+        ctx.beginPath();
+        ctx.arc(proj.x, proj.y, proj.radius, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Núcleo brillante
+        ctx.fillStyle = proj.glow;
+        ctx.beginPath();
+        ctx.arc(proj.x, proj.y, proj.radius * 0.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+    });
+    
+    // === PARTÍCULAS ===
+    state.particles.forEach(p => {
+        ctx.globalAlpha = p.life;
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        ctx.fill();
+    });
+    ctx.globalAlpha = 1;
+    
+    // === JUGADORES ===
+    [P1, P2].forEach(p => {
+        if (!p.alive) return;
+        
+        // Escudo
+        if (p.shield) {
+            ctx.fillStyle = CFG.shieldColor;
+            ctx.strokeStyle = 'rgba(120, 200, 255, 0.8)';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, CFG.playerRadius + 12 + Math.sin(state.time * 10) * 2, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+        }
+        
+        // Indicador de ralentización
+        if (p.slowTimer > 0) {
+            ctx.strokeStyle = 'rgba(78, 205, 196, 0.6)';
+            ctx.lineWidth = 2;
+            ctx.setLineDash([4, 4]);
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, CFG.playerRadius + 6, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.setLineDash([]);
+        }
+        
+        // Sombra
+        ctx.fillStyle = 'rgba(0,0,0,0.4)';
+        ctx.beginPath();
+        ctx.ellipse(p.x + 3, p.y + 5, CFG.playerRadius, CFG.playerRadius * 0.6, 0, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Glow
+        ctx.shadowColor = p.glow;
+        ctx.shadowBlur = p.hitFlash > 0 ? 40 : 15;
+        
+        // Cuerpo
+        ctx.fillStyle = p.hitFlash > 0 ? '#ffffff' : p.color;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, CFG.playerRadius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+        
+        // Borde
+        ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        
+        // Varita/dirección
+        const wandX = p.x + Math.cos(p.facing) * (CFG.playerRadius + 8);
+        const wandY = p.y + Math.sin(p.facing) * (CFG.playerRadius + 8);
+        ctx.strokeStyle = '#8b5a2b';
+        ctx.lineWidth = 3;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(p.x + Math.cos(p.facing) * CFG.playerRadius * 0.5, p.y + Math.sin(p.facing) * CFG.playerRadius * 0.5);
+        ctx.lineTo(wandX, wandY);
+        ctx.stroke();
+        
+        // Punta de la varita brilla con el hechizo seleccionado
+        const spellColor = SPELLS[p.selectedSpell].color;
+        ctx.fillStyle = spellColor;
+        ctx.shadowColor = spellColor;
+        ctx.shadowBlur = 10;
+        ctx.beginPath();
+        ctx.arc(wandX, wandY, 3, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+        
+        // Ojos
+        const eyeAngle = p.facing;
+        ctx.fillStyle = 'white';
+        ctx.beginPath();
+        ctx.arc(p.x + Math.cos(eyeAngle - 0.4) * 7, p.y + Math.sin(eyeAngle - 0.4) * 7, 3, 0, Math.PI * 2);
+        ctx.arc(p.x + Math.cos(eyeAngle + 0.4) * 7, p.y + Math.sin(eyeAngle + 0.4) * 7, 3, 0, Math.PI * 2);
+        ctx.fill();
+    });
+    
+    ctx.restore();
+}
+
+// === GAME LOOP ===
+function loop(now) {
+    const dt = Math.min(0.05, (now - lastTime) / 1000);
+    lastTime = now;
+    
+    update(dt);
+    draw();
+    
+    if (state.active || state.particles.length > 0) {
+        requestAnimationFrame(loop);
+    } else {
+        draw(); // último frame
+    }
+}
+
+// Render inicial
+draw();
+
+</script>
+</body>
+</html>
