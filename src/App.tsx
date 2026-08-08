@@ -1,9 +1,7 @@
+import { Desktop } from "./components/os/desk/Desktop";
+
 function App() {
-  return (
-    <div>
-      <h1>Zenova</h1>
-    </div>
-  )
+  return <Desktop />;
 }
 
-export default App
+export default App;

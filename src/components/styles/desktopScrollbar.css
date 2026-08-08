@@ -1,0 +1,104 @@
+/* ============================================================
+   ZENOVA — Minimal Material You Scrollbar
+   ============================================================ */
+
+:root {
+    --zenova-scrollbar-size: 6px;
+    --zenova-scrollbar-thumb: rgba(208, 188, 255, 0.48);
+    --zenova-scrollbar-thumb-hover: rgba(208, 188, 255, 0.72);
+}
+
+/* ============================================================
+   Firefox
+   ============================================================ */
+
+html,
+body,
+* {
+    scrollbar-width: thin;
+    scrollbar-color:
+        var(--zenova-scrollbar-thumb)
+        transparent;
+}
+
+/* ============================================================
+   Chromium / WebKit
+   ============================================================ */
+
+*::-webkit-scrollbar {
+    width: var(--zenova-scrollbar-size);
+    height: var(--zenova-scrollbar-size);
+}
+
+/* Track completamente transparente */
+*::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+/* Thumb */
+*::-webkit-scrollbar-thumb {
+    background: var(--zenova-scrollbar-thumb);
+    border-radius: 999px;
+}
+
+/* Hover */
+*::-webkit-scrollbar-thumb:hover {
+    background: var(--zenova-scrollbar-thumb-hover);
+}
+
+/* Esquina */
+*::-webkit-scrollbar-corner {
+    background: transparent;
+}
+
+/* ============================================================
+   HIDDEN
+   ============================================================ */
+
+.zenova-scrollbar-hidden {
+    scrollbar-width: none;
+}
+
+.zenova-scrollbar-hidden::-webkit-scrollbar {
+    display: none;
+}
+
+/* ============================================================
+   SUBTLE
+   Para menús, listas y paneles secundarios.
+   ============================================================ */
+
+.zenova-scrollbar-subtle {
+    scrollbar-width: thin;
+    scrollbar-color:
+        rgba(255, 255, 255, 0.22)
+        transparent;
+}
+
+.zenova-scrollbar-subtle::-webkit-scrollbar {
+    width: 5px;
+    height: 5px;
+}
+
+.zenova-scrollbar-subtle::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.zenova-scrollbar-subtle::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.22);
+    border-radius: 999px;
+}
+
+.zenova-scrollbar-subtle::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.42);
+}
+
+/* ============================================================
+   REDUCED MOTION
+   ============================================================ */
+
+@media (prefers-reduced-motion: reduce) {
+    * {
+        scroll-behavior: auto;
+    }
+}

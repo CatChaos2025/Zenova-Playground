@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PONG Arcade</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: #000;
+            color: #fff;
+            font-family: 'Courier New', monospace;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            overflow: hidden;
+            user-select: none;
+        }
+        h1 {
+            font-size: 32px;
+            letter-spacing: 12px;
+            margin-bottom: 8px;
+            text-shadow: 0 0 10px #0ff, 0 0 20px #0ff;
+        }
+        #scoreboard {
+            display: flex;
+            gap: 60px;
+            font-size: 28px;
+            margin-bottom: 8px;
+            font-weight: bold;
+        }
+        .player-score { color: #0ff; text-shadow: 0 0 8px #0ff; }
+        .cpu-score { color: #f0f; text-shadow: 0 0 8px #f0f; }
+        canvas {
+            border: 2px solid #333;
+            box-shadow: 0 0 30px rgba(0, 255, 255, 0.2);
+            background: #050505;
+            cursor: none;
+            touch-action: none;
+        }
+        .hint { margin-top: 10px; font-size: 12px; opacity: 0.5; letter-spacing: 2px; }
+        #overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.88);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 10;
+            text-align: center;
+        }
+        #overlay h2 { font-size: 36px; margin-bottom: 15px; letter-spacing: 4px; }
+        #overlay p { margin: 5px 0; opacity: 0.8; }
+        #overlay button {
+            margin-top: 20px;
+            padding: 12px 35px;
+            font-family: inherit;
+            font-size: 18px;
+            background: transparent;
+            color: #0ff;
+            border: 2px solid #0ff;
+            cursor: pointer;
+            letter-spacing: 3px;
+            transition: all 0.2s;
+        }
+        #overlay button:hover { background: #0ff; color: #000; box-shadow: 0 0 20px #0ff; }
+        .hidden { display: none !important; }
+        .blink { animation: blink 1s infinite; }
+        @keyframes blink { 50% { opacity: 0.3; } }
+    </style>
+</head>
+<body>
+    <h1>PONG</h1>
+    <div id="scoreboard">
+        <span class="player-score" id="p-score">0</span>
+        <span class="cpu-score" id="c-score">0</span>
+    </div>
+    <canvas id="game" width="800" height="500"></canvas>
+    <div class="hint">MOUSE / W-S / FLECHAS · [P] PAUSA</div>
+
+    <div id="overlay">
+        <h2 id="ov-title">PONG</h2>
+        <p id="ov-msg">Primero en llegar a 7 puntos gana</p>
+        <p class="blink" id="ov-hint">Presiona ESPACIO o toca para empezar</p>
+        <button id="ov-btn">JUGAR</button>
+    </div>
+
+<script>
+/**
+ * PONG ARCADE
+ * - Jugador (izquierda): Mouse, táctil, o teclas W/S y flechas
+ * - CPU (derecha): IA con predicción imperfecta
+ * - La pelota acelera con cada golpe y el ángulo depende del punto de impacto
+ */
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+const W = canvas.width, H = canvas.height;
+
+const WIN_SCORE = 7;
+const PADDLE_W = 12, PADDLE_H = 90;
+const PADDLE_SPEED = 9;
+const BALL_SIZE = 12;
+const BALL_START_SPEED = 6;
+const BALL_MAX_SPEED = 16;
+const BALL_ACCEL = 1.06;      // +6% velocidad por golpe
+const CPU_MAX_SPEED = 6.5;    // Velocidad máxima de la CPU (dificultad)
+const CPU_ERROR = 45;         // Margen de error de la CPU en píxeles
+
+// Estados: 'menu', 'playing', 'paused', 'over'
+let state = 'menu';
+let playerScore = 0, cpuScore = 0;
+let keys = {};
+let audioCtx = null;
+
+// ─── Entidades ───────────────────────────────────────────────
+const player = { x: 25, y: H/2 - PADDLE_H/2, w: PADDLE_W, h: PADDLE_H, dy: 0 };
+const cpu    = { x: W - 25 - PADDLE_W, y: H/2 - PADDLE_H/2, w: PADDLE_W, h: PADDLE_H, targetY: H/2 };
+const ball   = { x: W/2, y: H/2, vx: 0, vy: 0, speed: BALL_START_SPEED, trail: [] };
+let particles = [];
+let cpuOffset = 0;
+
+// ─── Audio retro (Web Audio API) ─────────────────────────────
+function initAudio() {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+}
+function beep(freq, dur = 0.06, vol = 0.08) {
+    if (!audioCtx) return;
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = 'square';
+    osc.frequency.value = freq;
+    gain.gain.setValueAtTime(vol, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + dur);
+    osc.connect(gain); gain.connect(audioCtx.destination);
+    osc.start(); osc.stop(audioCtx.currentTime + dur);
+}
+
+// ─── Utilidades ──────────────────────────────────────────────
+function resetBall(direction) {
+    ball.x = W/2; ball.y = H/2;
+    ball.speed = BALL_START_SPEED;
+    ball.trail = [];
+    const angle = (Math.random() * 0.6 - 0.3) * Math.PI; // -54° a 54°
+    ball.vx = Math.cos(angle) * ball.speed * direction;
+    ball.vy = Math.sin(angle) * ball.speed;
+    // Nuevo objetivo imperfecto para la CPU
+    cpuOffset = (Math.random() - 0.5) * CPU_ERROR * 2;
+}
+
+function spawnParticles(x, y, color) {
+    for (let i = 0; i < 10; i++) {
+        particles.push({
+            x, y,
+            vx: (Math.random() - 0.5) * 6,
+            vy: (Math.random() - 0.5) * 6,
+            life: 20, color
+        });
+    }
+}
+
+// ─── Lógica ──────────────────────────────────────────────────
+function update() {
+    if (state !== 'playing') return;
+
+    // Movimiento jugador (teclado)
+    if (keys['w'] || keys['W'] || keys['ArrowUp'])   player.y -= PADDLE_SPEED;
+    if (keys['s'] || keys['S'] || keys['ArrowDown']) player.y += PADDLE_SPEED;
+    player.y += player.dy; // soporte táctil
+    player.dy = 0;
+    player.y = Math.max(0, Math.min(H - player.h, player.y));
+
+    // IA de la CPU: solo persigue cuando la pelota va hacia ella
+    if (ball.vx > 0) {
+        cpu.targetY = ball.y - cpu.h/2 + cpuOffset;
+    } else {
+        cpu.targetY = H/2 - cpu.h/2; // vuelve al centro
+    }
+    const diff = cpu.targetY - cpu.y;
+    const move = Math.max(-CPU_MAX_SPEED, Math.min(CPU_MAX_SPEED, diff));
+    cpu.y += move;
+    cpu.y = Math.max(0, Math.min(H - cpu.h, cpu.y));
+
+    // Mover pelota con estela
+    ball.trail.push({x: ball.x, y: ball.y});
+    if (ball.trail.length > 10) ball.trail.shift();
+    ball.x += ball.vx;
+    ball.y += ball.vy;
+
+    // Rebote arriba/abajo
+    if (ball.y - BALL_SIZE/2 <= 0) {
+        ball.y = BALL_SIZE/2; ball.vy = Math.abs(ball.vy); beep(300);
+    }
+    if (ball.y + BALL_SIZE/2 >= H) {
+        ball.y = H - BALL_SIZE/2; ball.vy = -Math.abs(ball.vy); beep(300);
+    }
+
+    // Colisión con palas
+    checkPaddleCollision(player, +1);
+    checkPaddleCollision(cpu, -1);
+
+    // Anotación
+    if (ball.x < -BALL_SIZE) {
+        cpuScore++;
+        document.getElementById('c-score').textContent = cpuScore;
+        beep(120, 0.3); spawnParticles(0, ball.y, '#f0f');
+        if (cpuScore >= WIN_SCORE) return endGame(false);
+        resetBall(+1); // saca hacia el perdedor
+    }
+    if (ball.x > W + BALL_SIZE) {
+        playerScore++;
+        document.getElementById('p-score').textContent = playerScore;
+        beep(600, 0.2); spawnParticles(W, ball.y, '#0ff');
+        if (playerScore >= WIN_SCORE) return endGame(true);
+        resetBall(-1);
+    }
+
+    // Actualizar partículas
+    particles = particles.filter(p => p.life > 0);
+    particles.forEach(p => { p.x += p.vx; p.y += p.vy; p.life--; });
+}
+
+function checkPaddleCollision(paddle, dir) {
+    if (
+        ball.x - BALL_SIZE/2 < paddle.x + paddle.w &&
+        ball.x + BALL_SIZE/2 > paddle.x &&
+        ball.y - BALL_SIZE/2 < paddle.y + paddle.h &&
+        ball.y + BALL_SIZE/2 > paddle.y
+    ) {
+        // Evitar doble colisión: solo si la pelota va hacia la pala
+        if ((dir === +1 && ball.vx < 0) || (dir === -1 && ball.vx > 0)) {
+            // Ángulo según punto de impacto (-1 arriba, +1 abajo)
+            const hitPos = ((ball.y - paddle.y) / paddle.h - 0.5) * 2;
+            const angle = hitPos * (Math.PI / 3.2); // máx ~56°
+            ball.speed = Math.min(BALL_MAX_SPEED, ball.speed * BALL_ACCEL);
+            ball.vx = Math.cos(angle) * ball.speed * dir;
+            ball.vy = Math.sin(angle) * ball.speed;
+            // Empujar fuera de la pala
+            ball.x = dir === +1 ? paddle.x + paddle.w + BALL_SIZE/2 : paddle.x - BALL_SIZE/2;
+            beep(dir === +1 ? 440 : 520);
+            spawnParticles(ball.x, ball.y, dir === +1 ? '#0ff' : '#f0f');
+            cpuOffset = (Math.random() - 0.5) * CPU_ERROR * 2; // nueva imprecisión
+        }
+    }
+}
+
+// ─── Renderizado ─────────────────────────────────────────────
+function draw() {
+    ctx.fillStyle = '#050505';
+    ctx.fillRect(0, 0, W, H);
+
+    // Línea central discontinua
+    ctx.fillStyle = '#2a2a2a';
+    for (let y = 0; y < H; y += 30) ctx.fillRect(W/2 - 2, y, 4, 18);
+
+    // Estela de la pelota
+    ball.trail.forEach((t, i) => {
+        const alpha = (i / ball.trail.length) * 0.35;
+        ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
+        const size = BALL_SIZE * (i / ball.trail.length);
+        ctx.fillRect(t.x - size/2, t.y - size/2, size, size);
+    });
+
+    // Pelota
+    ctx.fillStyle = '#fff';
+    ctx.shadowColor = '#fff';
+    ctx.shadowBlur = 12;
+    ctx.fillRect(ball.x - BALL_SIZE/2, ball.y - BALL_SIZE/2, BALL_SIZE, BALL_SIZE);
+    ctx.shadowBlur = 0;
+
+    // Palas con brillo neón
+    ctx.shadowColor = '#0ff'; ctx.shadowBlur = 15;
+    ctx.fillStyle = '#0ff';
+    ctx.fillRect(player.x, player.y, player.w, player.h);
+    ctx.shadowColor = '#f0f';
+    ctx.fillStyle = '#f0f';
+    ctx.fillRect(cpu.x, cpu.y, cpu.w, cpu.h);
+    ctx.shadowBlur = 0;
+
+    // Partículas
+    particles.forEach(p => {
+        ctx.globalAlpha = p.life / 20;
+        ctx.fillStyle = p.color;
+        ctx.fillRect(p.x, p.y, 3, 3);
+    });
+    ctx.globalAlpha = 1;
+
+    // Texto de pausa
+    if (state === 'paused') {
+        ctx.fillStyle = 'rgba(0,0,0,0.6)';
+        ctx.fillRect(0, 0, W, H);
+        ctx.fillStyle = '#0ff';
+        ctx.font = 'bold 36px Courier New';
+        ctx.textAlign = 'center';
+        ctx.fillText('PAUSA', W/2, H/2);
+        ctx.font = '16px Courier New';
+        ctx.fillText('Presiona P para continuar', W/2, H/2 + 35);
+    }
+}
+
+function loop() {
+    update();
+    draw();
+    requestAnimationFrame(loop);
+}
+
+// ─── Control de estado ───────────────────────────────────────
+function startGame() {
+    playerScore = 0; cpuScore = 0;
+    document.getElementById('p-score').textContent = 0;
+    document.getElementById('c-score').textContent = 0;
+    player.y = cpu.y = H/2 - PADDLE_H/2;
+    resetBall(Math.random() < 0.5 ? 1 : -1);
+    state = 'playing';
+    document.getElementById('overlay').classList.add('hidden');
+    initAudio();
+}
+
+function endGame(playerWon) {
+    state = 'over';
+    const ov = document.getElementById('overlay');
+    document.getElementById('ov-title').textContent = playerWon ? '¡GANASTE!' : 'GAME OVER';
+    document.getElementById('ov-title').style.color = playerWon ? '#0ff' : '#f0f';
+    document.getElementById('ov-msg').textContent = `Resultado final: ${playerScore} - ${cpuScore}`;
+    document.getElementById('ov-hint').textContent = 'Presiona ESPACIO para revancha';
+    document.getElementById('ov-btn').textContent = 'REVANCHA';
+    ov.classList.remove('hidden');
+    beep(playerWon ? 800 : 100, 0.4, 0.12);
+}
+
+// ─── Input ───────────────────────────────────────────────────
+document.addEventListener('keydown', e => {
+    keys[e.key] = true;
+    if (e.key === ' ') {
+        e.preventDefault();
+        if (state === 'menu' || state === 'over') startGame();
+        else state = state === 'playing' ? 'paused' : 'playing';
+    }
+    if ((e.key === 'p' || e.key === 'P') && (state === 'playing' || state === 'paused')) {
+        state = state === 'playing' ? 'paused' : 'playing';
+    }
+    initAudio();
+});
+document.addEventListener('keyup', e => keys[e.key] = false);
+
+// Mouse
+canvas.addEventListener('mousemove', e => {
+    if (state !== 'playing') return;
+    const rect = canvas.getBoundingClientRect();
+    const scaleY = canvas.height / rect.height;
+    player.y = (e.clientY - rect.top) * scaleY - player.h / 2;
+    player.y = Math.max(0, Math.min(H - player.h, player.y));
+});
+
+// Táctil (móvil)
+canvas.addEventListener('touchmove', e => {
+    e.preventDefault();
+    if (state !== 'playing') return;
+    const rect = canvas.getBoundingClientRect();
+    const scaleY = canvas.height / rect.height;
+    player.y = (e.touches[0].clientY - rect.top) * scaleY - player.h / 2;
+    player.y = Math.max(0, Math.min(H - player.h, player.y));
+}, { passive: false });
+
+document.getElementById('ov-btn').addEventListener('click', startGame);
+document.getElementById('overlay').addEventListener('click', e => {
+    if (e.target.id === 'overlay') startGame();
+});
+
+// Responsivo: escala el canvas manteniendo proporción
+function resize() {
+    const maxW = Math.min(window.innerWidth - 20, 800);
+    canvas.style.width = maxW + 'px';
+    canvas.style.height = (maxW * 0.625) + 'px';
+}
+window.addEventListener('resize', resize);
+resize();
+
+// Iniciar bucle
+loop();
+</script>
+</body>
+</html>

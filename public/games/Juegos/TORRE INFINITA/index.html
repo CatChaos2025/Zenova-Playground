@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Torre Infinita</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="contenedor">
+        <header>
+            <h1>🏗️ TORRE INFINITA</h1>
+        </header>
+        
+        <div class="panel-superior">
+            <div class="score-box">
+                <span class="score-label">ALTURA</span>
+                <span class="score-value" id="score">0</span>
+            </div>
+            <div class="score-box">
+                <span class="score-label">PERFECTOS</span>
+                <span class="score-value" id="perfectos">0</span>
+            </div>
+            <div class="score-box">
+                <span class="score-label">RÉCORD</span>
+                <span class="score-value" id="record">0</span>
+            </div>
+        </div>
+        
+        <canvas id="gameCanvas" width="400" height="500"></canvas>
+        
+        <div class="controles-info">
+            <span class="key">ESPACIO</span> o <span class="key">CLICK</span>
+        </div>
+    </div>
+    
+    <script src="script.js"></script>
+</body>
+</html>

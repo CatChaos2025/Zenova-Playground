@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Quoridor 4x4</title>
+<style>
+    :root {
+        --bg: #1a1a2e;
+        --board-bg: #d4a574;
+        --cell: min(60px, 12vw);
+        --gap: 6px;
+        --wall: #5d4037;
+        --p1: #e63946;
+        --p2: #457b9d;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+        font-family: system-ui, sans-serif;
+        background: var(--bg); color: white;
+        min-height: 100vh;
+        display: flex; flex-direction: column; align-items: center;
+        padding: 15px 10px; user-select: none;
+    }
+    h1 { font-size: 1.4rem; margin-bottom: 8px; }
+    .sub { color: #aaa; font-size: 0.8rem; margin-bottom: 12px; }
+
+    .wrap { display: flex; gap: 15px; flex-wrap: wrap; justify-content: center; }
+
+    #board {
+        display: grid;
+        grid-template-columns: repeat(7, auto);
+        grid-template-rows: repeat(7, auto);
+        background: var(--board-bg);
+        padding: 8px;
+        border-radius: 6px;
+        box-shadow: 0 5px 18px rgba(0,0,0,.4);
+    }
+
+    .c {
+        width: var(--cell); height: var(--cell);
+        background: rgba(255,255,255,.3);
+        border-radius: 4px;
+        cursor: pointer;
+        position: relative;
+    }
+    .c:hover:not(.occ) { background: rgba(255,214,10,.4); }
+    .c.vm { background: rgba(76,175,80,.5); }
+
+    .pw {
+        position: absolute; width: 70%; height: 70%;
+        top: 15%; left: 15%; border-radius: 50%;
+        box-shadow: 0 2px 4px rgba(0,0,0,.4);
+    }
+    .pw.p1 { background: radial-gradient(circle at 30% 30%, #ff6b6b, var(--p1)); }
+    .pw.p2 { background: radial-gradient(circle at 30% 30%, #74c0fc, var(--p2)); }
+
+    .wh, .wv { cursor: pointer; position: relative; }
+    .wh { width: calc(var(--cell)*2 + var(--gap)); height: var(--gap); }
+    .wv { width: var(--gap); height: calc(var(--cell)*2 + var(--gap)); }
+    #board.pw-mode .wh:hover, #board.pw-mode .wv:hover { background: rgba(255,214,10,.4); }
+
+    .wl { position: absolute; background: var(--wall); border-radius: 2px; width: 100%; height: 100%; }
+
+    .pan {
+        background: #16213e; padding: 12px; border-radius: 8px; width: 170px;
+        box-shadow: 0 3px 12px rgba(0,0,0,.3);
+    }
+    .st { margin-bottom: 10px; }
+    .lb { color: #aaa; font-size: .7rem; text-transform: uppercase; }
+    .vl { font-size: .95rem; font-weight: bold; margin-top: 3px; }
+    .wc { display: flex; gap: 10px; font-size: .9rem; }
+    .wd { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+    .wd.p1 { background: var(--p1); } .wd.p2 { background: var(--p2); }
+
+    select, button {
+        width: 100%; padding: 7px; margin-top: 6px;
+        border: none; border-radius: 5px; font-size: .85rem; cursor: pointer;
+    }
+    select { background: #ecf0f1; color: #2c3e50; }
+    button { background: var(--p1); color: white; font-weight: bold; }
+    button:hover { filter: brightness(1.15); }
+</style>
+</head>
+<body>
+
+<h1>🧱 Quoridor 4×4</h1>
+<div class="sub">Llega arriba · Partida rápida</div>
+
+<div class="wrap">
+    <div id="board"></div>
+    <div class="pan">
+        <div class="st"><div class="lb">Estado</div><div id="st" class="vl">Tu turno</div></div>
+        <div class="st"><div class="lb">Paredes</div><div class="wc"><span><span class="wd p1"></span> <span id="pw">3</span></span><span><span class="wd p2"></span> <span id="aw">3</span></span></div></div>
+        <select id="md"><option value="m" selected>Mover</option><option value="w">Pared</option></select>
+        <button id="rb">Reiniciar</button>
+    </div>
+</div>
+
+<script>
+const N=4,P1=1,P2=2;
+let b,hw,vw,pp,ap,pw,aw,tn,act,md;
+const $=id=>document.getElementById(id),B=$('board');
+
+function init(){
+    b=Array.from({length:N},()=>Array(N).fill(0));
+    hw=Array.from({length:N-1},()=>Array(N).fill(false));
+    vw=Array.from({length:N},()=>Array(N-1).fill(false));
+    pp={r:3,c:1};ap={r:0,c:2};
+    b[3][1]=P1;b[0][2]=P2;
+    pw=aw=3;
+    tn=P1;act=true;md='m';
+    $('md').value='m';
+    build();upd();
+}
+
+function build(){
+    B.innerHTML='';
+    for(let gr=0;gr<7;gr++)for(let gc=0;gc<7;gc++){
+        const cr=gr%2===0,cc=gc%2===0;
+        if(cr&&cc){
+            const r=gr/2,c=gc/2,d=document.createElement('div');
+            d.className='c';d.onclick=()=>cclick(r,c);
+            B.appendChild(d);
+        }else if(!cr&&cc){
+            const r=(gr-1)/2,c=gc/2,d=document.createElement('div');
+            d.className='wh';d.onclick=e=>{e.stopPropagation();wclick(r,c,'h');};
+            B.appendChild(d);
+        }else if(cr&&!cc){
+            const r=gr/2,c=(gc-1)/2,d=document.createElement('div');
+            d.className='wv';d.onclick=e=>{e.stopPropagation();wclick(r,c,'v');};
+            B.appendChild(d);
+        }else B.appendChild(document.createElement('div'));
+    }
+    ren();
+}
+
+function ren(){
+    document.querySelectorAll('.c').forEach(c=>{c.className='c';c.innerHTML='';});
+    document.querySelectorAll('.wl').forEach(w=>w.remove());
+    const pc=gC(pp.r,pp.c),ac=gC(ap.r,ap.c);
+    if(pc){pc.innerHTML='<div class="pw p1"></div>';pc.classList.add('occ');}
+    if(ac){ac.innerHTML='<div class="pw p2"></div>';ac.classList.add('occ');}
+    for(let r=0;r<N-1;r++)for(let c=0;c<N-1;c++){
+        if(hw[r][c])gS(r,c,'h').innerHTML='<div class="wl"></div>';
+        if(vw[r][c])gS(r,c,'v').innerHTML='<div class="wl"></div>';
+    }
+    if(act&&tn===P1&&md==='m')vm(pp.r,pp.c,P1).forEach(m=>gC(m.r,m.c)?.classList.add('vm'));
+    B.classList.toggle('pw-mode',md==='w');
+}
+
+function gC(r,c){return B.children[(r*2)*7+c*2];}
+function gS(r,c,o){return o==='h'?B.children[(r*2+1)*7+c*2]:B.children[(r*2)*7+c*2+1];}
+
+function upd(){
+    $('pw').textContent=pw;$('aw').textContent=aw;
+    if(!act)return;
+    $('st').textContent=tn===P1?(md==='m'?' Tu turno':' Coloca pared'):' IA...';
+}
+
+function blk(r1,c1,r2,c2){
+    if(r1===r2)return vw[r1][Math.min(c1,c2)];
+    if(c1===c2)return hw[Math.min(r1,r2)][c1];
+    return false;
+}
+
+function vm(r,c,pl){
+    const mv=[],op=pl===P1?ap:pp;
+    [[-1,0],[1,0],[0,-1],[0,1]].forEach(([dr,dc])=>{
+        const nr=r+dr,nc=c+dc;
+        if(nr>=0&&nr<N&&nc>=0&&nc<N&&!blk(r,c,nr,nc)&&b[nr][nc]===0)mv.push({r:nr,c:nc});
+    });
+    if(Math.abs(r-op.r)+Math.abs(c-op.c)===1){
+        const dr=op.r-r,dc=op.c-c,jr=r+dr*2,jc=c+dc*2;
+        if(jr>=0&&jr<N&&jc>=0&&jc<N&&!blk(r,c,op.r,op.c)&&!blk(op.r,op.c,jr,jc)){
+            if(b[jr][jc]===0)mv.push({r:jr,c:jc});
+            else(dr===0?[[-1,dc],[1,dc]]:[[dr,-1],[dr,1]]).forEach(([ddr,ddc])=>{
+                const dr2=op.r+ddr,dc2=op.c+ddc;
+                if(dr2>=0&&dr2<N&&dc2>=0&&dc2<N&&!blk(op.r,op.c,dr2,dc2)&&b[dr2][dc2]===0)mv.push({r:dr2,c:dc2});
+            });
+        }
+    }
+    return mv;
+}
+
+function cclick(r,c){
+    if(!act||tn!==P1||md!=='m')return;
+    if(vm(pp.r,pp.c,P1).some(m=>m.r===r&&m.c===c))domove(r,c,P1);
+}
+
+function domove(r,c,pl){
+    if(pl===P1){b[pp.r][pp.c]=0;pp={r,c};b[r][c]=P1;}
+    else{b[ap.r][ap.c]=0;ap={r,c};b[r][c]=P2;}
+    ren();
+    if((pl===P1&&pp.r===0)||(pl===P2&&ap.r===N-1)){act=false;$('st').textContent=pl===P1?' ¡Ganaste!':' Gana IA';return;}
+    tn=pl===P1?P2:P1;
+    if(tn===P2)setTimeout(aiturn,300);
+    upd();
+}
+
+function canw(r,c,o){
+    if(r<0||r>=N-1||c<0||c>=N-1)return false;
+    if(o==='h'&&hw[r][c]||o==='v'&&vw[r][c])return false;
+    if(o==='h'){if(c+1>=N||hw[r][c+1]||vw[r][c]||(vw[r+1]&&vw[r+1][c]))return false;}
+    else{if(r+1>=N||vw[r+1][c]||hw[r][c]||hw[r][c+1])return false;}
+    const th=hw.map(x=>[...x]),tv=vw.map(x=>[...x]);
+    if(o==='h'){th[r][c]=th[r][c+1]=true;}else{tv[r][c]=tv[r+1][c]=true;}
+    return hp(pp,{r:0,c:pp.c},th,tv)&&hp(ap,{r:N-1,c:ap.c},th,tv);
+}
+
+function hp(s,g,hw2,vw2){
+    const vis=Array.from({length:N},()=>Array(N).fill(false)),q=[s];vis[s.r][s.c]=true;
+    while(q.length){
+        const{r,c}=q.shift();
+        if(r===g.r&&c===g.c)return true;
+        [[-1,0],[1,0],[0,-1],[0,1]].forEach(([dr,dc])=>{
+            const nr=r+dr,nc=c+dc;
+            if(nr>=0&&nr<N&&nc>=0&&nc<N&&!vis[nr][nc]){
+                const bl=dr!==0?hw2[Math.min(r,nr)][c]:vw2[r][Math.min(c,nc)];
+                if(!bl){vis[nr][nc]=true;q.push({r:nr,c:nc});}
+            }
+        });
+    }
+    return false;
+}
+
+function wclick(r,c,o){
+    if(!act||tn!==P1||md!=='w'||pw<=0)return;
+    if(canw(r,c,o))placew(r,c,o,P1);
+}
+
+function placew(r,c,o,pl){
+    if(o==='h'){hw[r][c]=hw[r][c+1]=true;}else{vw[r][c]=vw[r+1][c]=true;}
+    if(pl===P1)pw--;else aw--;
+    ren();
+    tn=pl===P1?P2:P1;
+    if(tn===P2)setTimeout(aiturn,300);
+    md='m';$('md').value='m';
+    upd();
+}
+
+function aiturn(){
+    if(!act)return;
+    if(aw>0&&Math.random()<0.5){
+        const w=bestw();
+        if(w){placew(w.r,w.c,w.o,P2);return;}
+    }
+    const mv=vm(ap.r,ap.c,P2).sort((a,b)=>b.r-a.r);
+    if(mv.length)domove(mv[0].r,mv[0].c,P2);
+}
+
+function bestw(){
+    let best=null,sc=-1;
+    for(let r=0;r<N-1;r++)for(let c=0;c<N-1;c++)['h','v'].forEach(o=>{
+        if(canw(r,c,o)){
+            const th=hw.map(x=>[...x]),tv=vw.map(x=>[...x]);
+            if(o==='h'){th[r][c]=th[r][c+1]=true;}else{tv[r][c]=tv[r+1][c]=true;}
+            const d=bfs(pp,{r:0,c:pp.c},th,tv);
+            if(d>sc){sc=d;best={r,c,o};}
+        }
+    });
+    return best;
+}
+
+function bfs(s,g,hw2,vw2){
+    const vis=Array.from({length:N},()=>Array(N).fill(false)),q=[{...s,d:0}];vis[s.r][s.c]=true;
+    while(q.length){
+        const{r,c,d}=q.shift();
+        if(r===g.r&&c===g.c)return d;
+        [[-1,0],[1,0],[0,-1],[0,1]].forEach(([dr,dc])=>{
+            const nr=r+dr,nc=c+dc;
+            if(nr>=0&&nr<N&&nc>=0&&nc<N&&!vis[nr][nc]){
+                const bl=dr!==0?hw2[Math.min(r,nr)][c]:vw2[r][Math.min(c,nc)];
+                if(!bl){vis[nr][nc]=true;q.push({r:nr,c:nc,d:d+1});}
+            }
+        });
+    }
+    return 999;
+}
+
+$('md').onchange=e=>{md=e.target.value;ren();upd();};
+$('rb').onclick=init;
+init();
+</script>
+</body>
+</html>

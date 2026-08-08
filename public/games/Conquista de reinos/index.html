@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>⚔️ Conquista de Reinos</title>
+<style>
+    :root {
+        --bg: #1a1a2e;
+        --panel: #16213e;
+        --player: #e63946;
+        --enemy: #457b9d;
+        --neutral: #6c757d;
+        --gold: #ffd60a;
+        --hex-size: min(50px, 9vw);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+        font-family: 'Segoe UI', system-ui, sans-serif;
+        background: var(--bg); color: white;
+        min-height: 100vh;
+        display: flex; flex-direction: column; align-items: center;
+        padding: 15px 10px; user-select: none;
+    }
+    h1 { 
+        font-size: 1.7rem; margin-bottom: 6px; letter-spacing: 2px;
+        text-shadow: 0 2px 4px rgba(0,0,0,.5);
+    }
+    .sub { color: #aaa; font-size: 0.85rem; margin-bottom: 12px; }
+
+    .game-area {
+        display: flex; gap: 20px; flex-wrap: wrap;
+        justify-content: center; align-items: flex-start;
+    }
+
+    #map-container {
+        position: relative;
+        background: #2d3436;
+        padding: 15px;
+        border-radius: 10px;
+        box-shadow: 0 8px 25px rgba(0,0,0,.4);
+    }
+
+    #map {
+        display: grid;
+        gap: 4px;
+    }
+
+    .hex {
+        width: var(--hex-size);
+        height: calc(var(--hex-size) * 1.15);
+        clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        position: relative;
+        transition: all 0.2s;
+        font-weight: bold;
+        font-size: 0.8rem;
+    }
+    .hex:hover:not(.disabled) { transform: scale(1.05); filter: brightness(1.2); }
+    .hex.player { background: var(--player); }
+    .hex.enemy { background: var(--enemy); }
+    .hex.neutral { background: var(--neutral); }
+    .hex.selected { box-shadow: 0 0 0 3px var(--gold); z-index: 2; }
+    .hex.target { box-shadow: 0 0 0 3px #2ecc71; }
+    .hex.disabled { opacity: 0.6; cursor: not-allowed; }
+
+    .hex .troops {
+        background: rgba(0,0,0,0.4);
+        padding: 1px 5px;
+        border-radius: 10px;
+        font-size: 0.7rem;
+        margin-top: 2px;
+    }
+
+    .panel {
+        background: var(--panel); padding: 15px; border-radius: 10px; width: 240px;
+        box-shadow: 0 4px 15px rgba(0,0,0,.3);
+    }
+    .stat { margin-bottom: 12px; }
+    .label { color: #aaa; font-size: .75rem; text-transform: uppercase; letter-spacing: 1px; }
+    .value { font-size: 1.2rem; font-weight: bold; margin-top: 3px; display: flex; align-items: center; gap: 6px; }
+    .icon { font-size: 1.1rem; }
+
+    .resources {
+        display: flex; gap: 12px; margin-bottom: 12px;
+    }
+    .resource {
+        flex: 1; text-align: center;
+        background: rgba(255,255,255,0.05);
+        padding: 6px; border-radius: 6px;
+    }
+    .resource .val { font-size: 1.1rem; font-weight: bold; color: var(--gold); }
+
+    button {
+        width: 100%; padding: 10px; margin-top: 6px;
+        border: none; border-radius: 6px; font-size: .95rem; cursor: pointer;
+        font-weight: bold; transition: all 0.2s;
+    }
+    .btn-primary { background: var(--player); color: white; }
+    .btn-primary:hover:not(:disabled) { filter: brightness(1.15); transform: translateY(-1px); }
+    .btn-secondary { background: #555; color: white; }
+    .btn-secondary:hover { background: #666; }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .log {
+        margin-top: 12px; padding-top: 10px; border-top: 1px solid #333;
+        max-height: 120px; overflow-y: auto;
+        font-size: .8rem; line-height: 1.4;
+    }
+    .log-entry { margin-bottom: 4px; padding: 3px 0; }
+    .log-player { color: #ff6b6b; }
+    .log-enemy { color: #74c0fc; }
+    .log-system { color: #ffd60a; }
+
+    .message {
+        position: absolute; top: 50%; left: 50%;
+        transform: translate(-50%, -50%);
+        background: rgba(0,0,0,0.9); color: var(--gold);
+        padding: 20px 30px; border-radius: 10px;
+        font-size: 1.4rem; font-weight: bold; text-align: center;
+        z-index: 10; display: none;
+        animation: popIn 0.4s ease;
+    }
+
+    @keyframes popIn {
+        from { transform: translate(-50%, -50%) scale(0.5); opacity: 0; }
+        to { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+    }
+
+    @media (max-width: 700px) {
+        .panel { width: 90vw; max-width: 320px; }
+        :root { --hex-size: min(40px, 8vw); }
+    }
+</style>
+</head>
+<body>
+
+<h1>⚔️ Conquista de Reinos</h1>
+<div class="sub">Expande tu reino · Conquista territorios · Derrota al enemigo</div>
+
+<div class="game-area">
+    <div id="map-container">
+        <div id="map"></div>
+        <div id="message" class="message"></div>
+    </div>
+
+    <div class="panel">
+        <div class="stat">
+            <div class="label">Turno</div>
+            <div id="turn" class="value">🟢 Tu turno</div>
+        </div>
+
+        <div class="resources">
+            <div class="resource">
+                <div class="label">Oro</div>
+                <div class="val" id="gold">50</div>
+            </div>
+            <div class="resource">
+                <div class="label">Ejército</div>
+                <div class="val" id="army">20</div>
+            </div>
+        </div>
+
+        <div class="stat">
+            <div class="label">Territorios</div>
+            <div class="value">
+                <span style="color:var(--player)">🟥 <span id="player-terr">1</span></span>
+                <span style="color:var(--enemy)">🟦 <span id="enemy-terr">1</span></span>
+            </div>
+        </div>
+
+        <button id="recruitBtn" class="btn-primary">️ Reclutar (10 oro = 5 tropas)</button>
+        <button id="endTurnBtn" class="btn-primary">⏭️ Terminar Turno</button>
+        <button id="resetBtn" class="btn-secondary">Reiniciar</button>
+
+        <div class="log" id="log"></div>
+    </div>
+</div>
+
+<script>
+/* ================= CONFIGURACIÓN ================= */
+const ROWS = 7, COLS = 7;
+const PLAYER = 'player', ENEMY = 'enemy', NEUTRAL = 'neutral';
+
+let map = [];
+let selectedHex = null;
+let gameState = 'player-turn';
+let playerGold = 50, playerArmy = 20;
+let enemyGold = 50, enemyArmy = 20;
+let turnNumber = 1;
+
+const mapEl = document.getElementById('map');
+const logEl = document.getElementById('log');
+
+/* ================= INICIALIZACIÓN ================= */
+function initGame() {
+    map = [];
+    selectedHex = null;
+    gameState = 'player-turn';
+    playerGold = 50; playerArmy = 20;
+    enemyGold = 50; enemyArmy = 20;
+    turnNumber = 1;
+    
+    // Crear mapa hexagonal
+    for (let r = 0; r < ROWS; r++) {
+        map[r] = [];
+        for (let c = 0; c < COLS; c++) {
+            let owner = NEUTRAL;
+            let troops = Math.floor(Math.random() * 3) + 1;
+            
+            // Posiciones iniciales
+            if (r === 0 && c === 0) { owner = PLAYER; troops = 10; }
+            if (r === ROWS-1 && c === COLS-1) { owner = ENEMY; troops = 10; }
+            
+            map[r][c] = { owner, troops, row: r, col: c };
+        }
+    }
+    
+    buildMap();
+    updateUI();
+    addLog('system', '¡La conquista comienza!');
+}
+
+function buildMap() {
+    mapEl.innerHTML = '';
+    mapEl.style.gridTemplateColumns = `repeat(${COLS}, var(--hex-size))`;
+    
+    for (let r = 0; r < ROWS; r++) {
+        for (let c = 0; c < COLS; c++) {
+            const hex = document.createElement('div');
+            hex.className = `hex ${map[r][c].owner}`;
+            hex.dataset.r = r;
+            hex.dataset.c = c;
+            
+            // Desplazamiento para filas impares (efecto hexagonal)
+            if (r % 2 === 1) hex.style.marginLeft = 'calc(var(--hex-size) / 2)';
+            
+            hex.innerHTML = `<div class="troops">${map[r][c].troops}</div>`;
+            hex.addEventListener('click', () => onHexClick(r, c));
+            mapEl.appendChild(hex);
+        }
+    }
+    render();
+}
+
+function render() {
+    document.querySelectorAll('.hex').forEach((hex, idx) => {
+        const r = Math.floor(idx / COLS);
+        const c = idx % COLS;
+        const cell = map[r][c];
+        
+        hex.className = `hex ${cell.owner}`;
+        if (selectedHex && selectedHex.row === r && selectedHex.col === c) hex.classList.add('selected');
+        hex.innerHTML = `<div class="troops">${cell.troops}</div>`;
+    });
+    
+    // Resaltar objetivos válidos si hay selección
+    if (selectedHex && gameState === 'player-turn') {
+        const neighbors = getNeighbors(selectedHex.row, selectedHex.col);
+        neighbors.forEach(([nr, nc]) => {
+            if (map[nr][nc].owner !== PLAYER) {
+                const idx = nr * COLS + nc;
+                mapEl.children[idx].classList.add('target');
+            }
+        });
+    }
+}
+
+function getNeighbors(r, c) {
+    const neighbors = [];
+    const even = r % 2 === 0;
+    const dirs = even ? 
+        [[-1,-1],[-1,0],[0,-1],[0,1],[1,-1],[1,0]] :
+        [[-1,0],[-1,1],[0,-1],[0,1],[1,0],[1,1]];
+    
+    dirs.forEach(([dr, dc]) => {
+        const nr = r + dr, nc = c + dc;
+        if (nr >= 0 && nr < ROWS && nc >= 0 && nc < COLS) neighbors.push([nr, nc]);
+    });
+    return neighbors;
+}
+
+/* ================= LÓGICA DEL JUEGO ================= */
+function onHexClick(r, c) {
+    if (gameState !== 'player-turn') return;
+    
+    const cell = map[r][c];
+    
+    // Seleccionar territorio propio
+    if (cell.owner === PLAYER) {
+        selectedHex = cell;
+        render();
+        return;
+    }
+    
+    // Atacar territorio enemigo/neutral si hay selección
+    if (selectedHex && cell.owner !== PLAYER) {
+        const neighbors = getNeighbors(selectedHex.row, selectedHex.col);
+        const isNeighbor = neighbors.some(([nr, nc]) => nr === r && nc === c);
+        
+        if (isNeighbor && selectedHex.troops > 1) {
+            attack(selectedHex, cell);
+        }
+    }
+}
+
+function attack(attacker, defender) {
+    const attackTroops = Math.floor(attacker.troops / 2);
+    const defenseTroops = defender.troops;
+    
+    // Simulación de batalla
+    const attackRoll = attackTroops * (0.8 + Math.random() * 0.4);
+    const defenseRoll = defenseTroops * (0.7 + Math.random() * 0.4);
+    
+    if (attackRoll > defenseRoll) {
+        // Victoria
+        const survivors = Math.max(1, Math.floor(attackTroops * 0.6));
+        defender.owner = PLAYER;
+        defender.troops = survivors;
+        attacker.troops -= attackTroops;
+        
+        addLog('player', `¡Conquistaste territorio (${defender.row},${defender.col})!`);
+        
+        // Verificar victoria
+        if (checkWin(PLAYER)) {
+            endGame(true);
+            return;
+        }
+    } else {
+        // Derrota
+        attacker.troops = Math.max(1, attacker.troops - attackTroops);
+        defender.troops = Math.max(1, Math.floor(defenseTroops * 0.7));
+        addLog('player', `Ataque fallido en (${defender.row},${defender.col})`);
+    }
+    
+    selectedHex = null;
+    render();
+    updateUI();
+}
+
+function recruit() {
+    if (playerGold < 10 || gameState !== 'player-turn') return;
+    playerGold -= 10;
+    playerArmy += 5;
+    addLog('player', 'Reclutaste 5 tropas');
+    updateUI();
+}
+
+function distributeTroops() {
+    // Distribuir ejército entre territorios propios
+    const playerTerritories = [];
+    for (let r = 0; r < ROWS; r++) {
+        for (let c = 0; c < COLS; c++) {
+            if (map[r][c].owner === PLAYER) playerTerritories.push(map[r][c]);
+        }
+    }
+    
+    if (playerTerritories.length > 0 && playerArmy > 0) {
+        const perTerritory = Math.floor(playerArmy / playerTerritories.length);
+        const remainder = playerArmy % playerTerritories.length;
+        
+        playerTerritories.forEach((t, i) => {
+            t.troops += perTerritory + (i < remainder ? 1 : 0);
+        });
+        playerArmy = 0;
+    }
+}
+
+function endPlayerTurn() {
+    if (gameState !== 'player-turn') return;
+    
+    distributeTroops();
+    gameState = 'enemy-turn';
+    selectedHex = null;
+    updateUI();
+    render();
+    
+    setTimeout(enemyTurn, 800);
+}
+
+/* ================= IA ENEMIGA ================= */
+function enemyTurn() {
+    addLog('enemy', 'Turno del enemigo...');
+    
+    // 1. Reclutar si tiene oro
+    if (enemyGold >= 10) {
+        enemyGold -= 10;
+        enemyArmy += 5;
+    }
+    
+    // 2. Distribuir tropas
+    const enemyTerritories = [];
+    for (let r = 0; r < ROWS; r++) {
+        for (let c = 0; c < COLS; c++) {
+            if (map[r][c].owner === ENEMY) enemyTerritories.push(map[r][c]);
+        }
+    }
+    
+    if (enemyTerritories.length > 0 && enemyArmy > 0) {
+        const perTerritory = Math.floor(enemyArmy / enemyTerritories.length);
+        const remainder = enemyArmy % enemyTerritories.length;
+        enemyTerritories.forEach((t, i) => {
+            t.troops += perTerritory + (i < remainder ? 1 : 0);
+        });
+        enemyArmy = 0;
+    }
+    
+    // 3. Atacar territorios adyacentes
+    let attacked = false;
+    for (const terr of enemyTerritories) {
+        if (terr.troops <= 1) continue;
+        
+        const neighbors = getNeighbors(terr.row, terr.col);
+        for (const [nr, nc] of neighbors) {
+            const target = map[nr][nc];
+            if (target.owner !== ENEMY && terr.troops > target.troops) {
+                // Atacar
+                const attackTroops = Math.floor(terr.troops / 2);
+                const defenseTroops = target.troops;
+                const attackRoll = attackTroops * (0.8 + Math.random() * 0.4);
+                const defenseRoll = defenseTroops * (0.7 + Math.random() * 0.4);
+                
+                if (attackRoll > defenseRoll) {
+                    const survivors = Math.max(1, Math.floor(attackTroops * 0.6));
+                    target.owner = ENEMY;
+                    target.troops = survivors;
+                    terr.troops -= attackTroops;
+                    addLog('enemy', `Enemigo conquistó (${nr},${nc})`);
+                    attacked = true;
+                    
+                    if (checkWin(ENEMY)) {
+                        endGame(false);
+                        return;
+                    }
+                } else {
+                    terr.troops = Math.max(1, terr.troops - attackTroops);
+                    target.troops = Math.max(1, Math.floor(target.troops * 0.7));
+                }
+                break; // Un ataque por territorio
+            }
+        }
+        if (attacked) break;
+    }
+    
+    // 4. Generar oro
+    enemyGold += enemyTerritories.length * 2;
+    playerGold += countTerritories(PLAYER) * 2;
+    
+    turnNumber++;
+    gameState = 'player-turn';
+    updateUI();
+    render();
+    addLog('system', `Turno ${turnNumber}`);
+}
+
+/* ================= UTILIDADES ================= */
+function countTerritories(owner) {
+    let count = 0;
+    for (let r = 0; r < ROWS; r++) {
+        for (let c = 0; c < COLS; c++) {
+            if (map[r][c].owner === owner) count++;
+        }
+    }
+    return count;
+}
+
+function checkWin(owner) {
+    const total = ROWS * COLS;
+    return countTerritories(owner) === total;
+}
+
+function endGame(playerWon) {
+    gameState = 'game-over';
+    const msg = document.getElementById('message');
+    msg.innerHTML = playerWon ? 
+        '👑 ¡VICTORIA!<br>Has conquistado todos los reinos' : 
+        '💀 DERROTA<br>El enemigo ha dominado el mapa';
+    msg.style.display = 'block';
+    addLog('system', playerWon ? '¡Ganaste la guerra!' : 'Has sido derrotado');
+}
+
+function addLog(type, text) {
+    const entry = document.createElement('div');
+    entry.className = `log-entry log-${type}`;
+    entry.textContent = text;
+    logEl.prepend(entry);
+    if (logEl.children.length > 20) logEl.lastChild.remove();
+}
+
+function updateUI() {
+    document.getElementById('gold').textContent = playerGold;
+    document.getElementById('army').textContent = playerArmy;
+    document.getElementById('player-terr').textContent = countTerritories(PLAYER);
+    document.getElementById('enemy-terr').textContent = countTerritories(ENEMY);
+    document.getElementById('turn').innerHTML = gameState === 'player-turn' ? 
+        '🟢 Tu turno' : gameState === 'enemy-turn' ? '🔵 Turno enemigo' : '🏁 Juego terminado';
+    
+    document.getElementById('recruitBtn').disabled = playerGold < 10 || gameState !== 'player-turn';
+    document.getElementById('endTurnBtn').disabled = gameState !== 'player-turn';
+}
+
+/* ================= EVENTOS ================= */
+document.getElementById('recruitBtn').addEventListener('click', recruit);
+document.getElementById('endTurnBtn').addEventListener('click', endPlayerTurn);
+document.getElementById('resetBtn').addEventListener('click', () => {
+    document.getElementById('message').style.display = 'none';
+    initGame();
+});
+
+// Iniciar
+initGame();
+</script>
+</body>
+</html>

@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Esquiva los Bloques</title>
+    <!-- Vinculamos el archivo CSS -->
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <div id="game-container">
+        <!-- El Jugador -->
+        <div id="player"></div>
+        
+        <!-- Contenedor donde aparecerán los enemigos -->
+        <div id="enemies-container"></div>
+
+        <!-- Capa de Interfaz (HUD y Menús) -->
+        <div id="ui-layer">
+            <div id="score-board">Puntos: 0</div>
+            
+            <!-- Pantalla de Inicio -->
+            <div id="start-screen" class="screen">
+                <h1>Esquiva los Bloques</h1>
+                <p>Mueve el mouse o desliza el dedo<br>para evitar los bloques rojos.</p>
+                <button id="start-btn">Jugar</button>
+            </div>
+
+            <!-- Pantalla de Game Over -->
+            <div id="game-over-screen" class="screen hidden">
+                <h1 class="red-text">¡Perdiste!</h1>
+                <p>Puntaje Final: <span id="final-score">0</span></p>
+                <button id="restart-btn">Reintentar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Vinculamos el archivo JavaScript -->
+    <script src="script.js"></script>
+</body>
+</html>

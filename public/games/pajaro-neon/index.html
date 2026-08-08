@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Pájaro Neón</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <div class="game-wrapper">
+        <h1 class="title">🐦 Pájaro Neón</h1>
+
+        <!-- Marcador -->
+        <div class="score-panel">
+            <div class="score-box">
+                <span class="label">Puntos</span>
+                <span id="score">0</span>
+            </div>
+            <div class="score-box">
+                <span class="label">Récord</span>
+                <span id="high-score">0</span>
+            </div>
+        </div>
+
+        <!-- Área de juego -->
+        <div id="canvas-container">
+            <canvas id="game-canvas" width="400" height="600"></canvas>
+
+            <!-- Pantalla de Inicio -->
+            <div id="start-screen" class="overlay">
+                <h2>¿Puedes volar?</h2>
+                <p>Toca la pantalla, haz clic<br>o presiona ESPACIO para aletear.</p>
+                <p>¡No choques con las tuberías!</p>
+                <button id="start-btn">🚀 Volar</button>
+            </div>
+
+            <!-- Pantalla de Game Over -->
+            <div id="game-over-screen" class="overlay hidden">
+                <h2 class="red">💥 ¡Choque!</h2>
+                <p>Puntos: <span id="final-score">0</span></p>
+                <p id="new-record" class="hidden gold">🏆 ¡Nuevo récord!</p>
+                <button id="restart-btn">🔄 Reintentar</button>
+            </div>
+        </div>
+
+        <p class="instruction">Toca / Clic / Espacio para aletear</p>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>

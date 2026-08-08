@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Snake Neón</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="contenedor">
+        <header>
+            <h1>🐍 SNAKE NEÓN</h1>
+            <p class="subtitulo">Come. Crece. Sobrevive.</p>
+        </header>
+        
+        <div class="panel-superior">
+            <div class="score-box">
+                <span class="score-label">PUNTOS</span>
+                <span class="score-value" id="score">0</span>
+            </div>
+            <div class="score-box">
+                <span class="score-label">RÉCORD</span>
+                <span class="score-value" id="record">0</span>
+            </div>
+            <div class="score-box">
+                <span class="score-label">LARGO</span>
+                <span class="score-value" id="largo">3</span>
+            </div>
+        </div>
+        
+        <!-- Canvas más pequeño -->
+        <canvas id="gameCanvas" width="400" height="400"></canvas>
+        
+        <div class="controles-info">
+            <span class="key">←→↑↓</span> Mover
+            <span class="key">ESPACIO</span> Pausa
+            <span class="key">ENTER</span> Iniciar
+        </div>
+    </div>
+    
+    <script src="script.js"></script>
+</body>
+</html>

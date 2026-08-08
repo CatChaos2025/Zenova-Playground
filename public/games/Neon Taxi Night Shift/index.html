@@ -1,0 +1,624 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Neon Taxi: Night Shift</title>
+    <style>
+        :root {
+            --bg: #0a0a12;
+            --ui-bg: rgba(10, 10, 18, 0.85);
+            --accent: #facc15;
+            --neon-blue: #38bdf8;
+            --neon-pink: #f472b6;
+            --danger: #ef4444;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; user-select: none; touch-action: none; }
+        
+        body { background: var(--bg); overflow: hidden; font-family: 'Courier New', monospace; color: white; height: 100vh; width: 100vw; }
+        canvas { display: block; }
+
+        .ui { position: absolute; inset: 0; pointer-events: none; padding: 15px; display: flex; flex-direction: column; justify-content: space-between; z-index: 10; }
+        
+        .hud-top { display: flex; justify-content: space-between; gap: 10px; }
+        .panel { background: var(--ui-bg); backdrop-filter: blur(8px); padding: 10px 18px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); text-align: center; min-width: 80px; }
+        .label { font-size: 0.6rem; text-transform: uppercase; letter-spacing: 1px; opacity: 0.6; }
+        .val { font-size: 1.4rem; font-weight: bold; color: var(--accent); line-height: 1.2; }
+        .val.time { color: var(--neon-blue); }
+        .val.money { color: #4ade80; }
+
+        .mission-bar { 
+            position: absolute; top: 80px; left: 50%; transform: translateX(-50%);
+            background: var(--ui-bg); padding: 8px 20px; border-radius: 20px;
+            border: 1px solid var(--accent); font-size: 0.85rem; font-weight: bold;
+            opacity: 0; transition: opacity 0.3s; white-space: nowrap;
+        }
+        .mission-bar.active { opacity: 1; }
+
+        .controls { display: none; pointer-events: auto; gap: 15px; align-items: flex-end; }
+        @media (hover: none) and (pointer: coarse) { .controls { display: flex; } }
+        
+        .d-pad { display: grid; grid-template-columns: repeat(3, 50px); grid-template-rows: repeat(2, 50px); gap: 5px; }
+        .btn { background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 1.2rem; cursor: pointer; user-select: none; transition: all 0.1s; }
+        .btn:active, .btn.pressed { background: rgba(255,255,255,0.3); transform: scale(0.95); }
+        .btn-up { grid-column: 2; grid-row: 1; }
+        .btn-left { grid-column: 1; grid-row: 2; }
+        .btn-right { grid-column: 3; grid-row: 2; }
+        .btn-brake { width: 70px; height: 70px; border-radius: 50%; background: rgba(239,68,68,0.2); border-color: var(--danger); margin-bottom: 10px; }
+        .btn-gas { width: 70px; height: 70px; border-radius: 50%; background: rgba(74,222,128,0.2); border-color: #4ade80; margin-bottom: 10px; }
+
+        .modal { position: absolute; inset: 0; background: rgba(0,0,0,0.8); backdrop-filter: blur(5px); display: flex; align-items: center; justify-content: center; z-index: 100; pointer-events: auto; }
+        .modal.hidden { display: none; }
+        .card { background: #1e293b; padding: 40px; border-radius: 16px; text-align: center; border: 2px solid var(--accent); max-width: 400px; width: 90%; }
+        h1 { font-size: 2.2rem; color: var(--accent); margin-bottom: 10px; text-shadow: 0 0 20px rgba(250,204,21,0.5); }
+        p { opacity: 0.8; margin-bottom: 20px; line-height: 1.5; font-size: 0.9rem; }
+        button { background: var(--accent); color: #000; border: none; padding: 12px 30px; font-size: 1rem; font-weight: bold; border-radius: 8px; cursor: pointer; font-family: inherit; }
+        button:hover { filter: brightness(1.1); }
+        
+        .controls-hint { position: fixed; bottom: 10px; left: 50%; transform: translateX(-50%); font-size: 0.75rem; opacity: 0.5; text-align: center; pointer-events: none; }
+    </style>
+</head>
+<body>
+
+<canvas id="c"></canvas>
+
+<div class="ui">
+    <div class="hud-top">
+        <div class="panel"><div class="label">Dinero</div><div class="val money" id="dMoney">$0</div></div>
+        <div class="panel"><div class="label">Tiempo</div><div class="val time" id="dTime">90</div></div>
+        <div class="panel"><div class="label">Velocidad</div><div class="val" id="dSpeed">0</div></div>
+        <div class="panel"><div class="label">Viajes</div><div class="val" id="dTrips">0</div></div>
+    </div>
+    <div class="mission-bar" id="dMission">🔍 BUSCA PASAJEROS</div>
+    
+    <div class="controls" style="justify-content: space-between; width: 100%;">
+        <div class="d-pad">
+            <div class="btn btn-up" data-key="ArrowUp">▲</div>
+            <div class="btn btn-left" data-key="ArrowLeft">◀</div>
+            <div class="btn btn-right" data-key="ArrowRight">▶</div>
+        </div>
+        <div style="display:flex; gap:15px;">
+            <div class="btn btn-brake" data-key="Space">🛑</div>
+            <div class="btn btn-gas" data-key="ArrowUp" data-second="true">🏎️</div>
+        </div>
+    </div>
+</div>
+
+<div class="controls-hint" id="hint">Flechas para moverte · Espacio para frenar</div>
+
+<div id="scrStart" class="modal">
+    <div class="card">
+        <h1>NEON TAXI</h1>
+        <p>Recoge pasajeros (🟢) y llévalos a su destino (🔴).<br>¡Evita el tráfico y edificios!</p>
+        <p style="font-size:0.8rem; opacity:0.6;">Teclado: Flechas + Espacio (Freno)<br>Móvil: Botones en pantalla</p>
+        <button id="startBtn">INICIAR TURNO</button>
+    </div>
+</div>
+
+<div id="scrOver" class="modal hidden">
+    <div class="card">
+        <h1 style="color:var(--danger)">TURNO TERMINADO</h1>
+        <p id="finalMsg">Se acabó el tiempo.</p>
+        <div style="display:flex; gap:10px; justify-content:center; margin-bottom:20px;">
+            <div class="panel"><div class="label">Ganancia</div><div class="val money" id="endMoney">$0</div></div>
+            <div class="panel"><div class="label">Viajes</div><div class="val" id="endTrips">0</div></div>
+        </div>
+        <button id="resetBtn">OTRO TURNO</button>
+    </div>
+</div>
+
+<script>
+const C = document.getElementById('c');
+const X = C.getContext('2d');
+let W, H;
+
+const CFG = {
+    tileSize: 80,
+    carW: 24, carH: 40,
+    maxSpeed: 7,
+    accel: 0.18,
+    brake: 0.4,
+    friction: 0.94,
+    turnSpeed: 0.06,
+    trafficCount: 12,
+    gameTime: 90
+};
+
+const S = {
+    on: false,
+    money: 0, trips: 0, time: CFG.gameTime,
+    camX: 0, camY: 0,  // ← CENTRO de la cámara (posición del jugador)
+    mission: null,
+    particles: []
+};
+
+const P = {
+    x: 0, y: 0, angle: 0, speed: 0,
+    vx: 0, vy: 0,
+    hasPassenger: false
+};
+
+let traffic = [];
+let cityMap = {};
+
+const K = {};
+window.addEventListener('keydown', e => { 
+    K[e.code] = true; 
+    if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space'].includes(e.code)) e.preventDefault();
+});
+window.addEventListener('keyup', e => K[e.code] = false);
+
+document.querySelectorAll('.btn').forEach(b => {
+    const key = b.dataset.key;
+    const press = (e) => { e.preventDefault(); K[key] = true; b.classList.add('pressed'); };
+    const release = (e) => { e.preventDefault(); K[key] = false; b.classList.remove('pressed'); };
+    b.addEventListener('touchstart', press);
+    b.addEventListener('touchend', release);
+    b.addEventListener('touchcancel', release);
+    b.addEventListener('mousedown', press);
+    b.addEventListener('mouseup', release);
+    b.addEventListener('mouseleave', release);
+});
+
+function resize() { W = C.width = innerWidth; H = C.height = innerHeight; }
+window.addEventListener('resize', resize);
+resize();
+
+function getTile(gx, gy) {
+    const key = `${gx},${gy}`;
+    if (cityMap[key] !== undefined) return cityMap[key];
+    
+    const hash = Math.sin(gx * 12.9898 + gy * 78.233) * 43758.5453;
+    const r = hash - Math.floor(hash);
+    
+    const isRoadX = gx % 3 === 0;
+    const isRoadY = gy % 3 === 0;
+    const isRoad = isRoadX || isRoadY;
+    
+    cityMap[key] = { 
+        road: isRoad, 
+        buildingColor: `hsl(${220 + r*40}, 30%, ${10 + r*15}%)`,
+        windowSeed: r
+    };
+    return cityMap[key];
+}
+
+function isRoad(x, y) {
+    const gx = Math.floor(x / CFG.tileSize);
+    const gy = Math.floor(y / CFG.tileSize);
+    return getTile(gx, gy).road;
+}
+
+function findNearestRoad(x, y) {
+    for (let r = 0; r < 10; r++) {
+        for (let dx = -r; dx <= r; dx++) {
+            for (let dy = -r; dy <= r; dy++) {
+                const tx = x + dx * CFG.tileSize * 0.5;
+                const ty = y + dy * CFG.tileSize * 0.5;
+                if (isRoad(tx, ty)) return { x: tx, y: ty };
+            }
+        }
+    }
+    return { x: CFG.tileSize * 0.5, y: CFG.tileSize * 0.5 };
+}
+
+function randomRoadPoint(range = 20) {
+    for (let i = 0; i < 100; i++) {
+        const gx = Math.floor(P.x/CFG.tileSize) + Math.floor((Math.random()-0.5)*range*2);
+        const gy = Math.floor(P.y/CFG.tileSize) + Math.floor((Math.random()-0.5)*range*2);
+        if (getTile(gx, gy).road) {
+            return { 
+                x: gx * CFG.tileSize + CFG.tileSize/2, 
+                y: gy * CFG.tileSize + CFG.tileSize/2 
+            };
+        }
+    }
+    return { x: P.x, y: P.y };
+}
+
+const Audio = {
+    ctx: null,
+    init() { try { this.ctx = new (window.AudioContext || window.webkitAudioContext)(); } catch(e){} },
+    beep(f, t, d, v=0.1) {
+        if (!this.ctx) return;
+        try {
+            const o = this.ctx.createOscillator(), g = this.ctx.createGain();
+            o.type = t; o.frequency.value = f;
+            o.connect(g); g.connect(this.ctx.destination);
+            g.gain.setValueAtTime(v, this.ctx.currentTime);
+            g.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + d);
+            o.start(); o.stop(this.ctx.currentTime + d);
+        } catch(e){}
+    },
+    pickup() { this.beep(600,'sine',0.1); setTimeout(()=>this.beep(900,'sine',0.15),80); },
+    dropoff() { this.beep(800,'square',0.1); setTimeout(()=>this.beep(1200,'square',0.2),100); setTimeout(()=>this.beep(1600,'square',0.3),200); },
+    crash() { this.beep(80,'sawtooth',0.4,0.2); }
+};
+
+function startGame() {
+    Audio.init();
+    document.getElementById('scrStart').classList.add('hidden');
+    resetGame();
+}
+
+function resetGame() {
+    P.x = CFG.tileSize * 0.5;
+    P.y = CFG.tileSize * 0.5;
+    P.angle = 0;
+    P.speed = 0;
+    P.vx = 0; P.vy = 0;
+    P.hasPassenger = false;
+    
+    S.money = 0; S.trips = 0; S.time = CFG.gameTime; S.on = true;
+    S.particles = [];
+    cityMap = {};
+    
+    // Cámara empieza en el jugador
+    S.camX = P.x;
+    S.camY = P.y;
+    
+    traffic = [];
+    for (let i = 0; i < CFG.trafficCount; i++) spawnTraffic(true);
+    
+    setMission('pickup');
+    document.getElementById('scrOver').classList.add('hidden');
+    
+    lastTime = performance.now();
+    requestAnimationFrame(loop);
+}
+
+function spawnTraffic(randomPos = false) {
+    const pos = randomPos ? randomRoadPoint(30) : randomRoadPoint(15);
+    const dirs = [0, Math.PI/2, Math.PI, -Math.PI/2];
+    traffic.push({
+        x: pos.x, y: pos.y,
+        angle: dirs[Math.floor(Math.random()*4)],
+        speed: 2 + Math.random() * 2,
+        color: ['#ef4444','#3b82f6','#a855f7','#64748b'][Math.floor(Math.random()*4)],
+        w: CFG.carW, h: CFG.carH
+    });
+}
+
+function setMission(type) {
+    const pos = randomRoadPoint(25);
+    S.mission = { type, x: pos.x, y: pos.y };
+    
+    const bar = document.getElementById('dMission');
+    bar.classList.add('active');
+    if (type === 'pickup') {
+        bar.innerText = "🟢 RECOGE AL PASAJERO";
+        bar.style.borderColor = "#4ade80";
+        P.hasPassenger = false;
+    } else {
+        bar.innerText = "🔴 LLEVA AL DESTINO";
+        bar.style.borderColor = "#ef4444";
+        P.hasPassenger = true;
+    }
+}
+
+function gameOver() {
+    S.on = false;
+    document.getElementById('endMoney').innerText = '$' + S.money;
+    document.getElementById('endTrips').innerText = S.trips;
+    document.getElementById('finalMsg').innerText = S.trips > 0 ? "¡Buen trabajo, conductor!" : "Nadie quiso tu taxi...";
+    document.getElementById('scrOver').classList.remove('hidden');
+}
+
+let lastTime = 0;
+let timerAccum = 0;
+
+function update(dt) {
+    if (!S.on) return;
+    
+    timerAccum += dt;
+    if (timerAccum >= 1) { 
+        S.time--; 
+        timerAccum -= 1; 
+        if (S.time <= 0) gameOver(); 
+    }
+    
+    const gas = K['ArrowUp'] || K['KeyW'];
+    const reverse = K['ArrowDown'] || K['KeyS'];
+    const brake = K['Space'] || K['ShiftLeft'];
+    const left = K['ArrowLeft'] || K['KeyA'];
+    const right = K['ArrowRight'] || K['KeyD'];
+    
+    if (gas) P.speed += CFG.accel;
+    else if (reverse) P.speed -= CFG.accel * 0.7;
+    else if (brake) P.speed *= (1 - CFG.brake * dt * 10);
+    else P.speed *= CFG.friction;
+    
+    P.speed = Math.max(-CFG.maxSpeed/2, Math.min(CFG.maxSpeed, P.speed));
+    if (Math.abs(P.speed) < 0.05) P.speed = 0;
+    
+    if (Math.abs(P.speed) > 0.2) {
+        const turnMult = Math.min(1, Math.abs(P.speed) / 3);
+        const dir = P.speed > 0 ? 1 : -1;
+        if (left) P.angle -= CFG.turnSpeed * dir * turnMult;
+        if (right) P.angle += CFG.turnSpeed * dir * turnMult;
+    }
+    
+    P.vx = Math.cos(P.angle) * P.speed;
+    P.vy = Math.sin(P.angle) * P.speed;
+    
+    const nextX = P.x + P.vx;
+    const nextY = P.y + P.vy;
+    
+    if (isRoad(nextX, nextY)) {
+        P.x = nextX;
+        P.y = nextY;
+    } else {
+        if (isRoad(nextX, P.y)) {
+            P.x = nextX;
+            P.speed *= 0.7;
+        } else if (isRoad(P.x, nextY)) {
+            P.y = nextY;
+            P.speed *= 0.7;
+        } else {
+            P.speed *= -0.3;
+            if (Math.abs(P.speed) > 2) {
+                Audio.crash();
+                spawnParticles(P.x, P.y, 5, '#fbbf24');
+            }
+        }
+    }
+    
+    if (!isRoad(P.x, P.y)) {
+        const safe = findNearestRoad(P.x, P.y);
+        P.x = safe.x; P.y = safe.y;
+        P.speed = 0;
+    }
+    
+    traffic.forEach(t => {
+        t.x += Math.cos(t.angle) * t.speed;
+        t.y += Math.sin(t.angle) * t.speed;
+        
+        if (Math.random() < 0.01 && isRoad(t.x, t.y)) {
+            const dirs = [0, Math.PI/2, Math.PI, -Math.PI/2];
+            t.angle = dirs[Math.floor(Math.random()*4)];
+        }
+        
+        if (!isRoad(t.x, t.y)) {
+            t.angle += Math.PI;
+            t.x += Math.cos(t.angle) * 5;
+            t.y += Math.sin(t.angle) * 5;
+        }
+        
+        const dist = Math.hypot(t.x - P.x, t.y - P.y);
+        if (dist > W * 1.5) {
+            const np = randomRoadPoint(20);
+            t.x = np.x; t.y = np.y;
+        }
+        
+        if (dist < 35 && Math.abs(P.speed) > 2) {
+            P.speed *= -0.5;
+            t.speed *= -0.5;
+            Audio.crash();
+            S.time = Math.max(0, S.time - 3);
+            spawnParticles((P.x+t.x)/2, (P.y+t.y)/2, 10, '#ef4444');
+        }
+    });
+    
+    if (S.mission) {
+        const dist = Math.hypot(P.x - S.mission.x, P.y - S.mission.y);
+        if (dist < 50 && Math.abs(P.speed) < 2) {
+            if (S.mission.type === 'pickup') {
+                Audio.pickup();
+                S.money += 5;
+                setMission('dropoff');
+            } else {
+                Audio.dropoff();
+                const fare = 20 + Math.floor(Math.random() * 30);
+                S.money += fare;
+                S.trips++;
+                S.time = Math.min(CFG.gameTime, S.time + 10);
+                spawnParticles(P.x, P.y, 20, '#4ade80');
+                setMission('pickup');
+            }
+        }
+    }
+    
+    // ============================================
+    // CÁMARA SIGUIENDO AL COCHE (CORREGIDO)
+    // ============================================
+    // Suavizado: la cámara se mueve hacia el jugador gradualmente
+    const cameraSpeed = 0.08; // Qué tan rápido sigue (0.1 = muy suave, 0.2 = más directo)
+    
+    // Opcional: la cámara mira un poco hacia donde se mueve (lookahead)
+    const lookahead = 60; // pixeles por delante del coche
+    const targetX = P.x + Math.cos(P.angle) * lookahead * (P.speed / CFG.maxSpeed);
+    const targetY = P.y + Math.sin(P.angle) * lookahead * (P.speed / CFG.maxSpeed);
+    
+    S.camX += (targetX - S.camX) * cameraSpeed;
+    S.camY += (targetY - S.camY) * cameraSpeed;
+    
+    S.particles.forEach(p => { p.x += p.vx; p.y += p.vy; p.life -= 0.03; });
+    S.particles = S.particles.filter(p => p.life > 0);
+    
+    document.getElementById('dMoney').innerText = '$' + S.money;
+    document.getElementById('dTime').innerText = Math.max(0, S.time);
+    document.getElementById('dSpeed').innerText = Math.abs(Math.round(P.speed * 10));
+    document.getElementById('dTrips').innerText = S.trips;
+    document.getElementById('dTime').style.color = S.time < 10 ? 'var(--danger)' : 'var(--neon-blue)';
+}
+
+function spawnParticles(x, y, n, color) {
+    for (let i = 0; i < n; i++) S.particles.push({
+        x, y, vx: (Math.random()-0.5)*6, vy: (Math.random()-0.5)*6, life: 1, color
+    });
+}
+
+function draw() {
+    X.fillStyle = '#0a0a12';
+    X.fillRect(0, 0, W, H);
+    
+    // ============================================
+    // CÁMARA: Centrar en la posición de la cámara
+    // ============================================
+    X.save();
+    X.translate(-S.camX + W/2, -S.camY + H/2);
+    
+    // Dibujar solo tiles visibles
+    const startGX = Math.floor((S.camX - W/2) / CFG.tileSize) - 1;
+    const startGY = Math.floor((S.camY - H/2) / CFG.tileSize) - 1;
+    const endGX = Math.floor((S.camX + W/2) / CFG.tileSize) + 1;
+    const endGY = Math.floor((S.camY + H/2) / CFG.tileSize) + 1;
+    
+    for (let gx = startGX; gx <= endGX; gx++) {
+        for (let gy = startGY; gy <= endGY; gy++) {
+            const tile = getTile(gx, gy);
+            const tx = gx * CFG.tileSize;
+            const ty = gy * CFG.tileSize;
+            
+            if (tile.road) {
+                X.fillStyle = '#1a1a2e';
+                X.fillRect(tx, ty, CFG.tileSize, CFG.tileSize);
+                
+                X.strokeStyle = 'rgba(255,255,255,0.1)';
+                X.lineWidth = 2;
+                X.setLineDash([10, 15]);
+                X.beginPath();
+                X.moveTo(tx + CFG.tileSize/2, ty);
+                X.lineTo(tx + CFG.tileSize/2, ty + CFG.tileSize);
+                X.moveTo(tx, ty + CFG.tileSize/2);
+                X.lineTo(tx + CFG.tileSize, ty + CFG.tileSize/2);
+                X.stroke();
+                X.setLineDash([]);
+            } else {
+                X.fillStyle = tile.buildingColor;
+                X.fillRect(tx + 2, ty + 2, CFG.tileSize - 4, CFG.tileSize - 4);
+                
+                X.fillStyle = `rgba(250, 204, 21, ${0.2 + tile.windowSeed * 0.4})`;
+                const ws = 8;
+                for (let wx = 0; wx < 3; wx++) {
+                    for (let wy = 0; wy < 3; wy++) {
+                        if (Math.sin(wx*13 + wy*7 + tile.windowSeed*100) > 0) {
+                            X.fillRect(tx + 10 + wx*18, ty + 10 + wy*18, ws, ws);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    if (S.mission) {
+        const pulse = Math.sin(Date.now()/200) * 5;
+        X.strokeStyle = S.mission.type === 'pickup' ? '#4ade80' : '#ef4444';
+        X.lineWidth = 3;
+        X.beginPath();
+        X.arc(S.mission.x, S.mission.y, 25 + pulse, 0, Math.PI*2);
+        X.stroke();
+        
+        X.font = '20px sans-serif';
+        X.textAlign = 'center';
+        X.textBaseline = 'middle';
+        X.fillText(S.mission.type === 'pickup' ? '🧑' : '🏠', S.mission.x, S.mission.y);
+        
+        X.strokeStyle = S.mission.type === 'pickup' ? 'rgba(74,222,128,0.2)' : 'rgba(239,68,68,0.2)';
+        X.lineWidth = 1;
+        X.setLineDash([5, 10]);
+        X.beginPath();
+        X.moveTo(P.x, P.y);
+        X.lineTo(S.mission.x, S.mission.y);
+        X.stroke();
+        X.setLineDash([]);
+    }
+    
+    traffic.forEach(t => drawCar(t.x, t.y, t.angle, t.color, false));
+    drawCar(P.x, P.y, P.angle, '#facc15', true);
+    
+    S.particles.forEach(p => {
+        X.globalAlpha = p.life;
+        X.fillStyle = p.color;
+        X.beginPath(); X.arc(p.x, p.y, 3, 0, Math.PI*2); X.fill();
+    });
+    X.globalAlpha = 1;
+    
+    X.restore();
+    
+    // Flecha direccional
+    if (S.mission) {
+        const dx = S.mission.x - P.x;
+        const dy = S.mission.y - P.y;
+        const ang = Math.atan2(dy, dx);
+        const dist = Math.hypot(dx, dy);
+        
+        if (dist > W * 0.4) {
+            const arrowDist = Math.min(W, H) * 0.35;
+            const ax = W/2 + Math.cos(ang) * arrowDist;
+            const ay = H/2 + Math.sin(ang) * arrowDist;
+            
+            X.save();
+            X.translate(ax, ay);
+            X.rotate(ang);
+            X.fillStyle = S.mission.type === 'pickup' ? '#4ade80' : '#ef4444';
+            X.shadowColor = X.fillStyle;
+            X.shadowBlur = 15;
+            X.beginPath();
+            X.moveTo(15, 0); X.lineTo(-8, -10); X.lineTo(-8, 10);
+            X.fill();
+            X.restore();
+        }
+    }
+}
+
+function drawCar(x, y, angle, color, isPlayer) {
+    X.save();
+    X.translate(x, y);
+    X.rotate(angle);
+    
+    X.fillStyle = 'rgba(0,0,0,0.4)';
+    X.fillRect(-CFG.carW/2 + 3, -CFG.carH/2 + 3, CFG.carW, CFG.carH);
+    
+    X.fillStyle = color;
+    X.fillRect(-CFG.carW/2, -CFG.carH/2, CFG.carW, CFG.carH);
+    
+    X.fillStyle = 'rgba(0,0,0,0.3)';
+    X.fillRect(-CFG.carW/2 + 3, -CFG.carH/2 + 8, CFG.carW - 6, CFG.carH - 16);
+    
+    X.fillStyle = '#fff';
+    X.shadowColor = '#fff';
+    X.shadowBlur = isPlayer ? 15 : 8;
+    X.fillRect(CFG.carW/2 - 4, -CFG.carH/2 + 2, 4, 6);
+    X.fillRect(CFG.carW/2 - 4, CFG.carH/2 - 8, 4, 6);
+    X.shadowBlur = 0;
+    
+    X.fillStyle = '#ef4444';
+    X.fillRect(-CFG.carW/2, -CFG.carH/2 + 2, 3, 5);
+    X.fillRect(-CFG.carW/2, CFG.carH/2 - 7, 3, 5);
+    
+    if (isPlayer) {
+        X.fillStyle = P.hasPassenger ? '#ef4444' : '#4ade80';
+        X.shadowColor = X.fillStyle;
+        X.shadowBlur = 10;
+        X.fillRect(-5, -3, 10, 6);
+        X.shadowBlur = 0;
+    }
+    
+    X.restore();
+}
+
+function loop(now) {
+    if (!S.on) return;
+    const dt = Math.min(0.05, (now - lastTime) / 1000);
+    lastTime = now;
+    
+    update(dt);
+    draw();
+    requestAnimationFrame(loop);
+}
+
+document.getElementById('startBtn').addEventListener('click', startGame);
+document.getElementById('resetBtn').addEventListener('click', () => {
+    document.getElementById('scrOver').classList.add('hidden');
+    resetGame();
+});
+
+draw();
+setTimeout(() => {
+    document.getElementById('hint').style.opacity = '0';
+}, 5000);
+
+</script>
+</body>
+</html>

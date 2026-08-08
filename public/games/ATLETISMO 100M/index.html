@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Atletismo 100M</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="contenedor">
+        <div class="panel-superior">
+            <div class="score-box azul">
+                <span class="score-label">DISTANCIA</span>
+                <span class="score-value" id="distancia">0m</span>
+            </div>
+            <div class="score-box verde">
+                <span class="score-label">ENERGÍA</span>
+                <div class="barra-energia">
+                    <div class="barra-relleno" id="energia"></div>
+                </div>
+            </div>
+            <div class="score-box naranja">
+                <span class="score-label">TIEMPO</span>
+                <span class="score-value" id="tiempo">0.00s</span>
+            </div>
+            <div class="score-box oro">
+                <span class="score-label">RÉCORD</span>
+                <span class="score-value" id="record">--</span>
+            </div>
+        </div>
+        
+        <canvas id="gameCanvas" width="600" height="400"></canvas>
+        
+        <div class="controles-info">
+            <span class="key">A</span> y <span class="key">D</span> Alternar para correr
+        </div>
+    </div>
+    
+    <script src="script.js"></script>
+</body>
+</html>

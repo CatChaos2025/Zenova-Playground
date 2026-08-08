@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sobreviviente Cósmico</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="contenedor">
+        <header>
+            <h1>🌟 Sobreviviente Cósmico</h1>
+            <p class="subtitulo">Sobrevive. Mejora. Conquista.</p>
+        </header>
+        
+        <div class="ui-panel">
+            <div class="stat">
+                <span class="label">NIVEL</span>
+                <span class="valor" id="nivel">1</span>
+            </div>
+            <div class="stat">
+                <span class="label">TIEMPO</span>
+                <span class="valor" id="tiempo">0:00</span>
+            </div>
+            <div class="stat">
+                <span class="label">EXP</span>
+                <div class="barra-exp">
+                    <div class="barra-relleno" id="barraExp"></div>
+                </div>
+                <span class="valor" id="expTexto">0/100</span>
+            </div>
+            <div class="stat">
+                <span class="label">VIDA</span>
+                <div class="barra-vida">
+                    <div class="barra-relleno" id="barraVida"></div>
+                </div>
+                <span class="valor" id="vidaTexto">100/100</span>
+            </div>
+            <div class="stat">
+                <span class="label">KILLS</span>
+                <span class="valor" id="kills">0</span>
+            </div>
+        </div>
+        
+        <canvas id="gameCanvas" width="900" height="600"></canvas>
+        
+        <div class="instrucciones">
+            <div class="key-group">
+                <span class="key">WASD</span> Mover
+                <span class="key">ESPACIO</span> Habilidad especial
+                <span class="key">P</span> Pausar
+            </div>
+        </div>
+    </div>
+    
+    <div id="modalSubida" class="modal oculto">
+        <div class="modal-contenido">
+            <h2>⬆️ ¡SUBIDA DE NIVEL!</h2>
+            <p>Elige una mejora:</p>
+            <div id="opcionesMejora" class="opciones-mejora"></div>
+        </div>
+    </div>
+    
+    <div id="modalGameOver" class="modal oculto">
+        <div class="modal-contenido">
+            <h2>💀 GAME OVER</h2>
+            <div id="estadisticas"></div>
+            <button id="btnReiniciar" class="btn-reiniciar">Reiniciar</button>
+        </div>
+    </div>
+    
+    <script src="script.js"></script>
+</body>
+</html>

@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Futbolito Neón</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <div class="game-wrapper">
+        <h1 class="title">⚽ Futbolito Neón</h1>
+
+        <!-- Marcador -->
+        <div class="score-panel">
+            <div class="score-box cpu">
+                <span class="label">CPU</span>
+                <span id="score-cpu">0</span>
+            </div>
+            <div class="timer-box">
+                <span id="timer">⏱️ 01:30</span>
+            </div>
+            <div class="score-box player">
+                <span class="label">TÚ</span>
+                <span id="score-player">0</span>
+            </div>
+        </div>
+
+        <!-- Área de juego -->
+        <div id="canvas-container">
+            <canvas id="game-canvas" width="400" height="600"></canvas>
+
+            <!-- Pantalla de Inicio -->
+            <div id="start-screen" class="overlay">
+                <h2>⚽ ¡A jugar!</h2>
+                <p>Arrastra el dedo o mouse<br>para mover a tu jugador 🔵</p>
+                <p>Mete más goles que la CPU 🔴<br>antes de que acabe el tiempo.</p>
+                <button id="start-btn">🏟️ Pitar Inicio</button>
+            </div>
+
+            <!-- Pantalla de Fin -->
+            <div id="end-screen" class="overlay hidden">
+                <h2 id="end-title">Fin del Partido</h2>
+                <p id="end-message">Resultado final</p>
+                <button id="restart-btn">🔄 Revancha</button>
+            </div>
+        </div>
+
+        <p class="instruction">Arrastra para mover • Solo en tu mitad</p>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>

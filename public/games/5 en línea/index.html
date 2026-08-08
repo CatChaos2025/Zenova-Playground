@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>5 en Línea vs IA</title>
+    <style>
+        :root {
+            --bg-color: #2c3e50;
+            --board-color: #deb887;
+            --line-color: #8b4513;
+            --p1-color: #111;      /* Humano (Negro) */
+            --p2-color: #f0f0f0;   /* IA (Blanco) */
+            --highlight: #e74c3c;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: white;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+            user-select: none;
+        }
+
+        h1 { margin-bottom: 10px; font-size: 1.8rem; }
+
+        .status-bar {
+            margin-bottom: 15px;
+            font-size: 1.1rem;
+            height: 30px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .badge {
+            width: 16px; height: 16px; border-radius: 50%; display: inline-block;
+        }
+        .badge.black { background: var(--p1-color); border: 1px solid #fff; }
+        .badge.white { background: var(--p2-color); border: 1px solid #ccc; }
+
+        .game-container {
+            position: relative;
+            padding: 8px;
+            background-color: #a0522d;
+            border-radius: 5px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+        }
+
+        .board {
+            display: grid;
+            grid-template-columns: repeat(15, 30px);
+            grid-template-rows: repeat(15, 30px);
+            background-color: var(--board-color);
+            border: 2px solid var(--line-color);
+            cursor: pointer;
+        }
+
+        .cell {
+            width: 30px; height: 30px;
+            position: relative;
+            display: flex; justify-content: center; align-items: center;
+        }
+
+        /* Líneas del tablero */
+        .cell::before {
+            content: ''; position: absolute; top: 50%; left: 0;
+            width: 100%; height: 1px; background-color: var(--line-color); z-index: 0;
+        }
+        .cell::after {
+            content: ''; position: absolute; left: 50%; top: 0;
+            height: 100%; width: 1px; background-color: var(--line-color); z-index: 0;
+        }
+
+        .stone {
+            width: 24px; height: 24px; border-radius: 50%; z-index: 1;
+            box-shadow: 2px 2px 4px rgba(0,0,0,0.4);
+            transform: scale(0); animation: popIn 0.2s forwards;
+        }
+
+        @keyframes popIn { to { transform: scale(1); } }
+
+        .stone.black { background: radial-gradient(circle at 30% 30%, #444, #000); }
+        .stone.white { background: radial-gradient(circle at 30% 30%, #fff, #ccc); }
+        .stone.winner { box-shadow: 0 0 10px 5px var(--highlight); border: 2px solid var(--highlight); }
+        
+        /* Indicador de última jugada */
+        .stone.last-move::after {
+            content: ''; position: absolute; top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            width: 6px; height: 6px; border-radius: 50%;
+            background: rgba(231, 76, 60, 0.8);
+        }
+
+        button {
+            margin-top: 20px; padding: 10px 25px; font-size: 1rem;
+            cursor: pointer; background-color: #27ae60; color: white;
+            border: none; border-radius: 5px; transition: background 0.3s;
+        }
+        button:hover { background-color: #2ecc71; }
+        button:disabled { background-color: #7f8c8d; cursor: not-allowed; }
+
+        @media (max-width: 500px) {
+            .board { grid-template-columns: repeat(15, 6vw); grid-template-rows: repeat(15, 6vw); }
+            .cell { width: 6vw; height: 6vw; }
+            .stone { width: 4.8vw; height: 4.8vw; }
+        }
+    </style>
+</head>
+<body>
+
+    <h1>5 en Línea vs IA</h1>
+
+    <div class="status-bar">
+        <span id="statusText">Tu turno (Negras)</span>
+    </div>
+
+    <div class="game-container">
+        <div id="board" class="board"></div>
+    </div>
+
+    <button id="resetBtn" onclick="resetGame()">Reiniciar Juego</button>
+
+<script>
+/**
+ * CONFIGURACIÓN Y ESTADO
+ */
+const SIZE = 15;
+const EMPTY = 0;
+const HUMAN = 1; // Negro
+const AI = 2;    // Blanco
+
+let board = [];
+let gameActive = true;
+let isAiThinking = false;
+
+const boardEl = document.getElementById('board');
+const statusEl = document.getElementById('statusText');
+const resetBtn = document.getElementById('resetBtn');
+
+// Puntuaciones para la evaluación heurística de la IA
+const SCORES = {
+    FIVE: 1000000,
+    OPEN_FOUR: 100000,
+    FOUR: 10000,
+    OPEN_THREE: 5000,
+    THREE: 1000,
+    OPEN_TWO: 500,
+    TWO: 100
+};
+
+/**
+ * INICIALIZACIÓN
+ */
+function initGame() {
+    board = Array(SIZE).fill(null).map(() => Array(SIZE).fill(EMPTY));
+    boardEl.innerHTML = '';
+    gameActive = true;
+    isAiThinking = false;
+    statusEl.innerText = "Tu turno (Negras)";
+    resetBtn.disabled = false;
+
+    for (let r = 0; r < SIZE; r++) {
+        for (let c = 0; c < SIZE; c++) {
+            const cell = document.createElement('div');
+            cell.classList.add('cell');
+            cell.dataset.r = r;
+            cell.dataset.c = c;
+            cell.addEventListener('click', () => onHumanClick(r, c));
+            boardEl.appendChild(cell);
+        }
+    }
+}
+
+/**
+ * LÓGICA DEL HUMANO
+ */
+function onHumanClick(r, c) {
+    if (!gameActive || isAiThinking || board[r][c] !== EMPTY) return;
+
+    makeMove(r, c, HUMAN);
+
+    if (checkWin(r, c, HUMAN)) {
+        endGame("¡Has ganado!");
+        return;
+    }
+    if (isBoardFull()) {
+        endGame("¡Empate!");
+        return;
+    }
+
+    // Turno de la IA con pequeño delay para realismo
+    isAiThinking = true;
+    statusEl.innerText = "La IA está pensando...";
+    resetBtn.disabled = true;
+    
+    setTimeout(() => {
+        aiTurn();
+    }, 300);
+}
+
+/**
+ * LÓGICA DE LA IA
+ */
+function aiTurn() {
+    if (!gameActive) return;
+
+    const move = getBestMove();
+    makeMove(move.r, move.c, AI);
+
+    if (checkWin(move.r, move.c, AI)) {
+        endGame("La IA ha ganado.");
+    } else if (isBoardFull()) {
+        endGame("¡Empate!");
+    } else {
+        isAiThinking = false;
+        statusEl.innerText = "Tu turno (Negras)";
+        resetBtn.disabled = false;
+    }
+}
+
+/**
+ * CEREBRO DE LA IA: Evaluación Heurística
+ * Analiza cada celda vacía y le da una puntuación basada en ataque y defensa.
+ */
+function getBestMove() {
+    let bestScore = -Infinity;
+    let bestMoves = [];
+
+    // Optimización: Solo evaluar celdas vecinas a fichas existentes
+    const candidates = getCandidateCells();
+    
+    // Si es el primer movimiento y el centro está libre, tomarlo
+    if (candidates.length === 0) return { r: 7, c: 7 };
+
+    for (const {r, c} of candidates) {
+        // Puntuar ataque (qué tan bueno es para la IA)
+        const attackScore = evaluatePosition(r, c, AI);
+        // Puntuar defensa (qué tan bueno sería para el humano -> hay que bloquearlo)
+        const defenseScore = evaluatePosition(r, c, HUMAN);
+
+        // La defensa es ligeramente prioritaria para evitar pérdidas tontas,
+        // pero si hay oportunidad de ganar, el ataque supera todo.
+        const score = attackScore + (defenseScore * 0.9); 
+
+        if (score > bestScore) {
+            bestScore = score;
+            bestMoves = [{r, c}];
+        } else if (score === bestScore) {
+            bestMoves.push({r, c});
+        }
+    }
+
+    // Elegir aleatoriamente entre los mejores movimientos para variar
+    return bestMoves[Math.floor(Math.random() * bestMoves.length)];
+}
+
+function getCandidateCells() {
+    const cells = [];
+    const visited = new Set();
+    const range = 2; // Buscar vecinos en radio de 2
+
+    for (let r = 0; r < SIZE; r++) {
+        for (let c = 0; c < SIZE; c++) {
+            if (board[r][c] !== EMPTY) {
+                for (let dr = -range; dr <= range; dr++) {
+                    for (let dc = -range; dc <= range; dc++) {
+                        const nr = r + dr, nc = c + dc;
+                        if (nr >= 0 && nr < SIZE && nc >= 0 && nc < SIZE && 
+                            board[nr][nc] === EMPTY && !visited.has(`${nr},${nc}`)) {
+                            cells.push({r: nr, c: nc});
+                            visited.add(`${nr},${nc}`);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return cells;
+}
+
+// Evalúa cuántos puntos vale colocar una ficha en (r,c) para un jugador dado
+function evaluatePosition(row, col, player) {
+    let totalScore = 0;
+    const directions = [[0,1], [1,0], [1,1], [1,-1]];
+
+    for (const [dr, dc] of directions) {
+        let count = 1;
+        let openEnds = 0;
+
+        // Contar en dirección positiva
+        let r = row + dr, c = col + dc;
+        while (r >= 0 && r < SIZE && c >= 0 && c < SIZE && board[r][c] === player) {
+            count++; r += dr; c += dc;
+        }
+        if (r >= 0 && r < SIZE && c >= 0 && c < SIZE && board[r][c] === EMPTY) openEnds++;
+
+        // Contar en dirección negativa
+        r = row - dr; c = col - dc;
+        while (r >= 0 && r < SIZE && c >= 0 && c < SIZE && board[r][c] === player) {
+            count++; r -= dr; c -= dc;
+        }
+        if (r >= 0 && r < SIZE && c >= 0 && c < SIZE && board[r][c] === EMPTY) openEnds++;
+
+        // Asignar puntuación según patrón
+        if (count >= 5) totalScore += SCORES.FIVE;
+        else if (count === 4) {
+            if (openEnds === 2) totalScore += SCORES.OPEN_FOUR;
+            else if (openEnds === 1) totalScore += SCORES.FOUR;
+        } else if (count === 3) {
+            if (openEnds === 2) totalScore += SCORES.OPEN_THREE;
+            else if (openEnds === 1) totalScore += SCORES.THREE;
+        } else if (count === 2) {
+            if (openEnds === 2) totalScore += SCORES.OPEN_TWO;
+            else if (openEnds === 1) totalScore += SCORES.TWO;
+        }
+    }
+    return totalScore;
+}
+
+/**
+ * UTILIDADES COMUNES
+ */
+function makeMove(r, c, player) {
+    board[r][c] = player;
+    const index = r * SIZE + c;
+    const cell = boardEl.children[index];
+    
+    // Quitar marcador de última jugada anterior
+    const prev = boardEl.querySelector('.last-move');
+    if (prev) prev.classList.remove('last-move');
+
+    const stone = document.createElement('div');
+    stone.classList.add('stone', player === HUMAN ? 'black' : 'white', 'last-move');
+    cell.appendChild(stone);
+}
+
+function checkWin(row, col, player) {
+    const directions = [[0,1], [1,0], [1,1], [1,-1]];
+    for (const [dr, dc] of directions) {
+        let count = 1;
+        let winningCells = [{r: row, c: col}];
+
+        // Positivo
+        let r = row + dr, c = col + dc;
+        while (r >= 0 && r < SIZE && c >= 0 && c < SIZE && board[r][c] === player) {
+            winningCells.push({r, c}); count++; r += dr; c += dc;
+        }
+        // Negativo
+        r = row - dr; c = col - dc;
+        while (r >= 0 && r < SIZE && c >= 0 && c < SIZE && board[r][c] === player) {
+            winningCells.push({r, c}); count++; r -= dr; c -= dc;
+        }
+
+        if (count >= 5) {
+            winningCells.forEach(pos => {
+                const idx = pos.r * SIZE + pos.c;
+                const s = boardEl.children[idx].querySelector('.stone');
+                if (s) s.classList.add('winner');
+            });
+            return true;
+        }
+    }
+    return false;
+}
+
+function isBoardFull() {
+    return board.every(row => row.every(cell => cell !== EMPTY));
+}
+
+function endGame(msg) {
+    gameActive = false;
+    isAiThinking = false;
+    statusEl.innerText = msg;
+    resetBtn.disabled = false;
+}
+
+function resetGame() {
+    initGame();
+}
+
+// Arrancar
+initGame();
+</script>
+</body>
+</html>

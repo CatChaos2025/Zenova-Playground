@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NEON BREAKER</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="contenedor">
+        <canvas id="gameCanvas" width="800" height="600"></canvas>
+        <div class="ui-overlay">
+            <div class="score-box">
+                <span class="score-label">PUNTOS</span>
+                <span class="score-value" id="score">0</span>
+            </div>
+            <div class="score-box">
+                <span class="score-label">NIVEL</span>
+                <span class="score-value" id="nivel">1</span>
+            </div>
+            <div class="score-box">
+                <span class="score-label">VIDAS</span>
+                <span class="score-value" id="vidas">❤️❤️❤️</span>
+            </div>
+            <div class="score-box">
+                <span class="score-label">COMBO</span>
+                <span class="score-value" id="combo">x1</span>
+            </div>
+            <div class="score-box">
+                <span class="score-label">RÉCORD</span>
+                <span class="score-value" id="record">0</span>
+            </div>
+        </div>
+        <div class="controles-info">
+            <span class="key">←→</span> Mover
+            <span class="key">ESPACIO</span> Lanzar bola
+            <span class="key">P</span> Pausa
+        </div>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>

@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Emoji 2048</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="contenedor">
+        <header>
+            <h1>🎲 EMOJI 2048</h1>
+            <p class="subtitulo">Combina emojis iguales para evolucionar</p>
+        </header>
+        
+        <div class="panel-superior">
+            <div class="score-box">
+                <span class="score-label">PUNTOS</span>
+                <span class="score-value" id="score">0</span>
+            </div>
+            <div class="score-box">
+                <span class="score-label">MEJOR</span>
+                <span class="score-value" id="record">0</span>
+            </div>
+            <button id="btnNuevo" class="btn-nuevo">🔄 Nuevo</button>
+        </div>
+        
+        <div id="tablero" class="tablero"></div>
+        
+        <div class="info-evolucion">
+            <h3>🧬 Evolución</h3>
+            <div class="evolucion-lista">
+                <span>🐣</span>→<span>🐥</span>→<span>🐔</span>→<span>🦅</span>→<span>🦉</span>→<span>🦚</span>→<span>🦄</span>
+            </div>
+        </div>
+        
+        <div class="controles-info">
+            <span class="key">←→↑↓</span> Mover
+            <span class="key">SWIPE</span> Táctil
+        </div>
+    </div>
+    
+    <div id="modalGameOver" class="modal oculto">
+        <div class="modal-contenido">
+            <h2 id="modalTitulo">💀 GAME OVER</h2>
+            <p id="modalTexto">No hay más movimientos posibles</p>
+            <div class="modal-stats">
+                <p>Puntuación: <span id="modalScore">0</span></p>
+            </div>
+            <button id="btnReintentar" class="btn-reintentar">🔄 Jugar de Nuevo</button>
+        </div>
+    </div>
+    
+    <script src="script.js"></script>
+</body>
+</html>

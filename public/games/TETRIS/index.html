@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tetris Clásico</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="contenedor">
+        <div class="area-juego">
+            <div class="panel-lateral">
+                <div class="info-box">
+                    <span class="info-label">HOLD</span>
+                    <canvas id="holdCanvas" width="80" height="80"></canvas>
+                </div>
+                <div class="info-box">
+                    <span class="info-label">PUNTOS</span>
+                    <span class="info-value" id="score">0</span>
+                </div>
+                <div class="info-box">
+                    <span class="info-label">NIVEL</span>
+                    <span class="info-value" id="level">1</span>
+                </div>
+                <div class="info-box">
+                    <span class="info-label">LÍNEAS</span>
+                    <span class="info-value" id="lines">0</span>
+                </div>
+            </div>
+            
+            <canvas id="gameCanvas" width="250" height="500"></canvas>
+            
+            <div class="panel-lateral">
+                <div class="info-box">
+                    <span class="info-label">NEXT</span>
+                    <canvas id="nextCanvas" width="80" height="80"></canvas>
+                </div>
+                <div class="info-box">
+                    <span class="info-label">RÉCORD</span>
+                    <span class="info-value" id="record">0</span>
+                </div>
+                <div class="controles-box">
+                    <span class="info-label">CONTROLES</span>
+                    <div class="control-item">←→ Mover</div>
+                    <div class="control-item">↑ Rotar</div>
+                    <div class="control-item">↓ Bajar</div>
+                    <div class="control-item">ESPACIO Drop</div>
+                    <div class="control-item">C Hold</div>
+                    <div class="control-item">P Pausa</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div id="modalGameOver" class="modal oculto">
+        <div class="modal-contenido">
+            <h2>💀 GAME OVER</h2>
+            <div class="modal-stats">
+                <p>Puntos: <span id="modalScore">0</span></p>
+                <p>Nivel: <span id="modalLevel">1</span></p>
+                <p>Líneas: <span id="modalLines">0</span></p>
+            </div>
+            <button id="btnReintentar" class="btn-reintentar">🔄 Jugar de Nuevo</button>
+        </div>
+    </div>
+    
+    <script src="script.js"></script>
+</body>
+</html>

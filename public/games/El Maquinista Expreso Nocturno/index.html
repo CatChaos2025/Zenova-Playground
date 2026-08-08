@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>El Maquinista: Edición Cinematográfica</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: #050505; font-family: 'Segoe UI', sans-serif; touch-action: none; }
+        canvas { display: block; }
+        
+        /* UI Minimalista y Elegante */
+        #ui-layer {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none; padding: 40px; box-sizing: border-box;
+            display: flex; flex-direction: column; justify-content: space-between;
+            background: radial-gradient(circle at center, transparent 60%, rgba(0,0,0,0.8) 100%);
+        }
+        
+        .hud-top { display: flex; justify-content: space-between; color: rgba(255,255,255,0.9); font-size: 18px; letter-spacing: 2px; text-transform: uppercase; }
+        
+        .speedometer {
+            position: absolute; bottom: 40px; right: 40px;
+            text-align: right; color: white;
+        }
+        .speed-big { font-size: 72px; font-weight: 200; line-height: 1; text-shadow: 0 0 20px rgba(255,255,255,0.3); }
+        .speed-label { font-size: 14px; opacity: 0.6; letter-spacing: 3px; }
+        
+        .warning { color: #ff4444; text-shadow: 0 0 15px rgba(255,0,0,0.5); animation: pulse 0.5s infinite alternate; }
+        
+        #overlay {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            text-align: center; color: white; pointer-events: auto;
+            backdrop-filter: blur(10px); padding: 60px; border-radius: 4px;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        h1 { font-size: 48px; font-weight: 100; margin: 0 0 20px 0; letter-spacing: 8px; }
+        p { font-size: 16px; opacity: 0.7; max-width: 400px; margin: 0 auto 30px auto; line-height: 1.6; }
+        button {
+            background: white; color: black; border: none; padding: 15px 40px;
+            font-size: 14px; letter-spacing: 3px; cursor: pointer; transition: all 0.3s;
+        }
+        button:hover { background: #ddd; transform: scale(1.05); }
+        
+        @keyframes pulse { from { opacity: 0.8; } to { opacity: 1; text-shadow: 0 0 30px red; } }
+    </style>
+</head>
+<body>
+
+<canvas id="gameCanvas"></canvas>
+
+<div id="ui-layer">
+    <div class="hud-top">
+        <div id="dist-display">DESTINO: 4.8 KM</div>
+        <div id="time-display">ETA: 60s</div>
+    </div>
+    <div class="speedometer">
+        <div class="speed-big" id="speed-val">0</div>
+        <div class="speed-label">KM/H</div>
+        <div id="limit-display" style="margin-top:10px; font-size:12px; opacity:0.5;">LÍMITE: --</div>
+    </div>
+</div>
+
+<div id="overlay">
+    <h1>EL MAQUINISTA</h1>
+    <p>Mantén presionado para acelerar. Suelta para frenar.<br>Respeta los límites en curvas rojas.<br>Detente suavemente en la estación final.</p>
+    <button onclick="startGame()">INICIAR MOTOR</button>
+</div>
+
+<script>
+/**
+ * MOTOR GRÁFICO MEJORADO
+ * Implementa: Parallax, Partículas, Iluminación Aditiva, Sombras Suaves
+ */
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d', { alpha: false }); // Optimización
+
+// Estado
+let state = 'MENU';
+let lastTime = 0;
+let cameraX = 0;
+let screenShake = 0;
+
+// Físicas
+const train = { x: 0, speed: 0, maxSpeed: 200, accel: 35, friction: 20, brake: 70 };
+let segments = [];
+let stationPos = 0;
+let timeLeft = 60;
+let isAccelerating = false;
+
+// Sistemas de Partículas
+let smokeParticles = [];
+let sparkParticles = [];
+
+// Assets Procedurales (Montañas generadas una vez)
+let mountains = [];
+
+function resize() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    generateMountains();
+}
+window.addEventListener('resize', resize);
+
+// --- INPUT ---
+const setInput = (v) => { if(state === 'PLAYING') isAccelerating = v; };
+window.addEventListener('mousedown', () => setInput(true));
+window.addEventListener('mouseup', () => setInput(false));
+window.addEventListener('touchstart', (e) => { e.preventDefault(); setInput(true); }, {passive:false});
+window.addEventListener('touchend', (e) => { e.preventDefault(); setInput(false); });
+window.addEventListener('keydown', (e) => { if(e.code==='Space'||e.code==='ArrowUp') setInput(true); });
+window.addEventListener('keyup', (e) => { if(e.code==='Space'||e.code==='ArrowUp') setInput(false); });
+
+// --- GENERACIÓN DE MUNDO ---
+function generateMountains() {
+    mountains = [];
+    for(let i=0; i<3; i++) { // 3 capas de montañas
+        let pts = [];
+        let w = canvas.width * 3; // Ancho total del fondo
+        for(let x=0; x<=w; x+=50) {
+            let h = Math.random() * 100 + (i * 80); // Más altas las lejanas
+            pts.push({x, y: canvas.height * 0.7 - h});
+        }
+        mountains.push({ points: pts, color: `rgba(${20+i*15}, ${25+i*15}, ${35+i*15}, 1)`, parallax: 0.1 + (i*0.1) });
+    }
+}
+
+function generateTrack() {
+    segments = [];
+    let pos = 0;
+    while(pos < 5000) {
+        let len = 400 + Math.random() * 600;
+        let isCurve = Math.random() > 0.6;
+        segments.push({
+            start: pos, end: pos + len,
+            type: isCurve ? 'curve' : 'straight',
+            limit: isCurve ? 70 + Math.random()*40 : 220,
+            tilt: isCurve ? (Math.random()-0.5)*0.1 : 0 // Inclinación visual en curva
+        });
+        pos += len;
+    }
+    segments.push({ start: pos, end: pos+1000, type: 'station', limit: 0, tilt: 0 });
+    stationPos = pos + 300;
+}
+
+// --- LÓGICA ---
+function startGame() {
+    train.x = 0; train.speed = 0; timeLeft = 60;
+    smokeParticles = []; sparkParticles = [];
+    generateTrack();
+    state = 'PLAYING';
+    document.getElementById('overlay').style.display = 'none';
+    lastTime = performance.now();
+    requestAnimationFrame(loop);
+}
+
+function update(dt) {
+    if(state !== 'PLAYING') return;
+
+    // Timer
+    timeLeft -= dt;
+    if(timeLeft <= 0) gameOver("TIEMPO AGOTADO");
+
+    // Física Tren
+    if(isAccelerating) train.speed += train.accel * dt;
+    else train.speed -= train.friction * dt;
+    train.speed = Math.max(0, Math.min(train.maxSpeed, train.speed));
+    train.x += train.speed * dt;
+
+    // Vibración cámara basada en velocidad
+    screenShake = (train.speed / train.maxSpeed) * 2;
+
+    // Chequeo Segmentos
+    const seg = segments.find(s => train.x >= s.start && train.x < s.end);
+    if(seg) {
+        const uiLimit = document.getElementById('limit-display');
+        uiLimit.innerText = seg.type === 'station' ? "DETENERSE" : `LÍMITE: ${Math.floor(seg.limit)}`;
+        uiLimit.style.color = (seg.type === 'curve' && train.speed > seg.limit) ? '#ff4444' : 'rgba(255,255,255,0.5)';
+        
+        if(seg.type === 'curve' && train.speed > seg.limit + 15) {
+            createSparks(train.x, canvas.height*0.7, 5);
+            if(train.speed > seg.limit + 30) gameOver("DESCARRILAMIENTO");
+        }
+    }
+
+    // Llegada
+    if(train.x >= stationPos) {
+        if(train.speed > 8) gameOver("COLISIÓN EN ANDÉN");
+        else gameWin();
+    }
+
+    // Partículas Humo
+    if(train.speed > 5 || isAccelerating) {
+        if(Math.random() < 0.3 + (train.speed/200)) {
+            smokeParticles.push({
+                x: train.x + 35, y: canvas.height*0.7 - 40,
+                vx: -train.speed*0.8 + (Math.random()-0.5)*20,
+                vy: -20 - Math.random()*30,
+                size: 5 + Math.random()*10,
+                life: 1.0, decay: 0.3 + Math.random()*0.2
+            });
+        }
+    }
+
+    // Actualizar Partículas
+    smokeParticles.forEach(p => {
+        p.x += p.vx * dt; p.y += p.vy * dt;
+        p.size += 30 * dt; p.life -= p.decay * dt;
+    });
+    smokeParticles = smokeParticles.filter(p => p.life > 0);
+
+    sparkParticles.forEach(p => {
+        p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 200*dt; p.life -= dt*2;
+    });
+    sparkParticles = sparkParticles.filter(p => p.life > 0);
+
+    // UI Updates
+    document.getElementById('speed-val').innerText = Math.floor(train.speed);
+    document.getElementById('speed-val').className = (seg && seg.type==='curve' && train.speed > seg.limit) ? 'speed-big warning' : 'speed-big';
+    document.getElementById('time-display').innerText = `ETA: ${Math.ceil(timeLeft)}s`;
+    document.getElementById('dist-display').innerText = `RESTANTE: ${((stationPos - train.x)/1000).toFixed(2)} KM`;
+
+    cameraX = train.x - canvas.width * 0.3;
+}
+
+function createSparks(x, y, count) {
+    for(let i=0; i<count; i++) {
+        sparkParticles.push({
+            x, y: y-5, vx: (Math.random()-0.5)*100, vy: -Math.random()*100, life: 0.5
+        });
+    }
+}
+
+// --- RENDERIZADO REALISTA ---
+function draw() {
+    // Shake effect
+    const shakeX = (Math.random()-0.5) * screenShake;
+    const shakeY = (Math.random()-0.5) * screenShake;
+    
+    // Cielo Gradiente Nocturno
+    const grad = ctx.createLinearGradient(0, 0, 0, canvas.height);
+    grad.addColorStop(0, '#020205');
+    grad.addColorStop(0.6, '#0a0f1a');
+    grad.addColorStop(1, '#1a2530');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // Estrellas
+    ctx.fillStyle = '#fff';
+    for(let i=0; i<80; i++) {
+        let sx = ((i*173) - cameraX*0.02) % canvas.width;
+        if(sx < 0) sx += canvas.width;
+        let sy = (i*67) % (canvas.height*0.6);
+        ctx.globalAlpha = Math.random()*0.8;
+        ctx.fillRect(sx+shakeX, sy+shakeY, 1.5, 1.5);
+    }
+    ctx.globalAlpha = 1;
+
+    // Montañas Parallax
+    mountains.forEach(m => {
+        ctx.fillStyle = m.color;
+        ctx.beginPath();
+        ctx.moveTo(0, canvas.height);
+        m.points.forEach(p => {
+            let px = p.x - (cameraX * m.parallax);
+            // Wrap around simple para infinito
+            px = ((px % (canvas.width*3)) + (canvas.width*3)) % (canvas.width*3) - canvas.width; 
+            ctx.lineTo(px + shakeX, p.y + shakeY);
+        });
+        ctx.lineTo(canvas.width, canvas.height);
+        ctx.fill();
+    });
+
+    ctx.save();
+    ctx.translate(-cameraX + shakeX, shakeY);
+
+    const groundY = canvas.height * 0.7;
+
+    // VÍA CON PERSPECTIVA
+    segments.forEach(s => {
+        if(s.end < cameraX - 100 || s.start > cameraX + canvas.width + 100) return;
+
+        // Balasto (piedras)
+        ctx.fillStyle = '#1a1a1a';
+        ctx.fillRect(s.start, groundY-2, s.end-s.start, 20);
+
+        // Durmientes (Travesaños)
+        ctx.fillStyle = '#2a2015';
+        for(let x=s.start; x<s.end; x+=25) {
+            // Efecto 3D falso inclinando durmientes
+            ctx.save();
+            ctx.translate(x, groundY+8);
+            ctx.transform(1, s.tilt, 0, 1, 0, 0);
+            ctx.fillRect(-3, -8, 6, 16);
+            ctx.restore();
+        }
+
+        // Rieles (Brillo metálico)
+        ctx.strokeStyle = '#556';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(s.start, groundY+2); ctx.lineTo(s.end, groundY+2);
+        ctx.moveTo(s.start, groundY+14); ctx.lineTo(s.end, groundY+14);
+        ctx.stroke();
+
+        // Indicadores Curva
+        if(s.type === 'curve') {
+            ctx.fillStyle = '#aa2222';
+            for(let x=s.start; x<s.end; x+=80) {
+                ctx.fillRect(x, groundY-30, 2, 30);
+                // Luz reflectante
+                ctx.fillStyle = 'rgba(255,50,50,0.5)';
+                ctx.beginPath(); ctx.arc(x+1, groundY-30, 3, 0, Math.PI*2); ctx.fill();
+                ctx.fillStyle = '#aa2222';
+            }
+        }
+    });
+
+    // ESTACIÓN
+    if(stationPos > cameraX - 200 && stationPos < cameraX + canvas.width + 500) {
+        // Andén
+        ctx.fillStyle = '#333';
+        ctx.fillRect(stationPos-50, groundY-10, 400, 30);
+        // Techo
+        ctx.fillStyle = '#111';
+        ctx.fillRect(stationPos, groundY-80, 300, 10);
+        ctx.fillRect(stationPos+20, groundY-80, 10, 70);
+        ctx.fillRect(stationPos+270, groundY-80, 10, 70);
+        // Luz andén
+        const lg = ctx.createRadialGradient(stationPos+150, groundY-60, 5, stationPos+150, groundY, 100);
+        lg.addColorStop(0, 'rgba(255,200,100,0.4)'); lg.addColorStop(1, 'transparent');
+        ctx.fillStyle = lg; ctx.fillRect(stationPos, groundY-80, 300, 100);
+    }
+
+    // HUMO (Renderizado aditivo para realismo)
+    ctx.globalCompositeOperation = 'screen';
+    smokeParticles.forEach(p => {
+        const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.size);
+        g.addColorStop(0, `rgba(200,200,210,${p.life*0.4})`);
+        g.addColorStop(1, 'transparent');
+        ctx.fillStyle = g;
+        ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, Math.PI*2); ctx.fill();
+    });
+    ctx.globalCompositeOperation = 'source-over';
+
+    // TREN DETALLADO
+    const tx = train.x;
+    const ty = groundY - 22;
+    
+    // Sombra bajo el tren
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    ctx.fillRect(tx-25, groundY+10, 90, 8);
+
+    // Ruedas animadas
+    ctx.fillStyle = '#111';
+    const rot = train.x / 12;
+    [tx-10, tx+15, tx+40, tx+65].forEach(wx => {
+        ctx.beginPath(); ctx.arc(wx, ty+22, 9, 0, Math.PI*2); ctx.fill();
+        ctx.strokeStyle = '#444'; ctx.lineWidth=2;
+        ctx.beginPath(); ctx.moveTo(wx,ty+22); 
+        ctx.lineTo(wx+Math.cos(rot)*9, ty+22+Math.sin(rot)*9); ctx.stroke();
+    });
+
+    // Cuerpo principal con degradado metálico
+    const bodyGrad = ctx.createLinearGradient(tx-20, ty-10, tx-20, ty+20);
+    bodyGrad.addColorStop(0, '#2c3e50');
+    bodyGrad.addColorStop(0.5, '#34495e');
+    bodyGrad.addColorStop(1, '#1a252f');
+    ctx.fillStyle = bodyGrad;
+    
+    // Forma aerodinámica
+    ctx.beginPath();
+    ctx.moveTo(tx-20, ty+20);
+    ctx.lineTo(tx-20, ty-5);
+    ctx.quadraticCurveTo(tx+10, ty-15, tx+40, ty-10);
+    ctx.lineTo(tx+70, ty-5);
+    ctx.lineTo(tx+80, ty+10);
+    ctx.lineTo(tx+80, ty+20);
+    ctx.fill();
+
+    // Cabina ventana
+    ctx.fillStyle = '#88ccff';
+    ctx.beginPath();
+    ctx.moveTo(tx+45, ty-8);
+    ctx.lineTo(tx+65, ty-3);
+    ctx.lineTo(tx+65, ty+5);
+    ctx.lineTo(tx+45, ty+5);
+    ctx.fill();
+    // Reflejo ventana
+    ctx.fillStyle = 'rgba(255,255,255,0.3)';
+    ctx.beginPath(); ctx.moveTo(tx+48,ty-6); ctx.lineTo(tx+55,ty-6); ctx.lineTo(tx+50,ty+5); ctx.fill();
+
+    // Chimenea detallada
+    ctx.fillStyle = '#111';
+    ctx.fillRect(tx+25, ty-25, 12, 20);
+    ctx.fillStyle = '#333'; // Borde superior
+    ctx.fillRect(tx+23, ty-27, 16, 4);
+
+    // FARO DELANTERO (Iluminación Volumétrica)
+    ctx.globalCompositeOperation = 'screen';
+    const beam = ctx.createRadialGradient(tx+80, ty+5, 2, tx+300, ty+20, 250);
+    beam.addColorStop(0, 'rgba(255,240,200,0.8)');
+    beam.addColorStop(0.3, 'rgba(255,240,200,0.2)');
+    beam.addColorStop(1, 'transparent');
+    ctx.fillStyle = beam;
+    ctx.beginPath();
+    ctx.moveTo(tx+80, ty+5);
+    ctx.lineTo(tx+400, ty-40);
+    ctx.lineTo(tx+400, ty+60);
+    ctx.fill();
+    ctx.globalCompositeOperation = 'source-over';
+
+    // Chispas
+    ctx.fillStyle = '#ffaa00';
+    sparkParticles.forEach(p => {
+        ctx.globalAlpha = p.life;
+        ctx.fillRect(p.x, p.y, 2, 2);
+    });
+    ctx.globalAlpha = 1;
+
+    ctx.restore();
+}
+
+function loop(ts) {
+    const dt = Math.min((ts - lastTime)/1000, 0.1);
+    lastTime = ts;
+    update(dt);
+    draw();
+    if(state === 'PLAYING') requestAnimationFrame(loop);
+}
+
+function gameOver(reason) {
+    state = 'GAMEOVER';
+    const ov = document.getElementById('overlay');
+    ov.style.display = 'block';
+    ov.querySelector('h1').innerText = reason;
+    ov.querySelector('p').innerText = "La seguridad es primero. Inténtalo de nuevo.";
+    ov.querySelector('button').innerText = "REINTENTAR";
+}
+
+function gameWin() {
+    state = 'WIN';
+    const ov = document.getElementById('overlay');
+    ov.style.display = 'block';
+    ov.querySelector('h1').innerText = "SERVICIO COMPLETADO";
+    ov.querySelector('p').innerText = `Llegada perfecta. Tiempo restante: ${timeLeft.toFixed(1)}s`;
+    ov.querySelector('button').innerText = "SIGUIENTE RUTA";
+}
+
+// Init
+resize();
+draw();
+
+</script>
+</body>
+</html>

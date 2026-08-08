@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reversi / Othello - Estrategia</title>
+    <style>
+        :root {
+            --board-bg: #2e7d32; /* Verde clásico */
+            --board-border: #1b5e20;
+            --cell-border: #1b5e20;
+            --black-piece: #212121;
+            --white-piece: #f5f5f5;
+            --highlight: rgba(255, 255, 255, 0.3);
+            --text-color: #333;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f0f2f5;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+        }
+
+        h1 { color: var(--board-border); margin-bottom: 10px; }
+
+        .scoreboard {
+            display: flex;
+            gap: 40px;
+            margin-bottom: 20px;
+            font-size: 1.5rem;
+            font-weight: bold;
+            background: white;
+            padding: 10px 30px;
+            border-radius: 50px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        .score-item { display: flex; align-items: center; gap: 10px; }
+        .dot { width: 20px; height: 20px; border-radius: 50%; display: inline-block; }
+        .dot.black { background-color: var(--black-piece); }
+        .dot.white { background-color: var(--white-piece); border: 1px solid #ccc; }
+
+        .status {
+            margin-bottom: 15px;
+            font-size: 1.2rem;
+            color: #555;
+            height: 1.5em;
+        }
+
+        .board {
+            display: grid;
+            grid-template-columns: repeat(8, 50px);
+            grid-template-rows: repeat(8, 50px);
+            background-color: var(--board-border);
+            border: 5px solid var(--board-border);
+            border-radius: 4px;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.3);
+        }
+
+        .cell {
+            width: 50px;
+            height: 50px;
+            background-color: var(--board-bg);
+            border: 1px solid var(--cell-border);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            position: relative;
+        }
+
+        .cell:hover { background-color: #388e3c; }
+
+        .piece {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            box-shadow: 2px 2px 4px rgba(0,0,0,0.4);
+            transition: transform 0.3s ease;
+        }
+
+        .piece.black { background-color: var(--black-piece); }
+        .piece.white { background-color: var(--white-piece); }
+
+        /* Animación de volteo */
+        .piece.flip { animation: flipEffect 0.4s ease-in-out; }
+
+        @keyframes flipEffect {
+            0% { transform: rotateY(0deg) scale(1); }
+            50% { transform: rotateY(90deg) scale(1.1); }
+            100% { transform: rotateY(0deg) scale(1); }
+        }
+
+        /* Indicador de movimiento válido */
+        .valid-move::after {
+            content: '';
+            width: 12px;
+            height: 12px;
+            background-color: var(--highlight);
+            border-radius: 50%;
+            position: absolute;
+        }
+
+        .controls { margin-top: 25px; }
+
+        button {
+            padding: 12px 24px;
+            font-size: 1rem;
+            background-color: var(--board-border);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        button:hover { background-color: #144d14; }
+
+        /* Modal */
+        .modal {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.8);
+            display: flex; justify-content: center; align-items: center;
+            opacity: 0; pointer-events: none; transition: opacity 0.3s;
+            z-index: 100;
+        }
+        .modal.show { opacity: 1; pointer-events: all; }
+        .modal-content {
+            background: white; padding: 40px; border-radius: 10px; text-align: center;
+        }
+        .modal h2 { margin-top: 0; color: var(--board-border); }
+
+        @media (max-width: 500px) {
+            .board { grid-template-columns: repeat(8, 40px); grid-template-rows: repeat(8, 40px); }
+            .cell { width: 40px; height: 40px; }
+            .piece { width: 32px; height: 32px; }
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Reversi (Othello)</h1>
+
+    <div class="scoreboard">
+        <div class="score-item">
+            <span class="dot black"></span> Tú: <span id="score-black">2</span>
+        </div>
+        <div class="score-item">
+            <span class="dot white"></span> IA: <span id="score-white">2</span>
+        </div>
+    </div>
+
+    <div class="status" id="status">Tu turno (Negras)</div>
+
+    <div class="board" id="board">
+        <!-- Generado por JS -->
+    </div>
+
+    <div class="controls">
+        <button onclick="game.init()">Reiniciar Juego</button>
+    </div>
+
+    <div id="modal" class="modal">
+        <div class="modal-content">
+            <h2 id="winner-text">¡Juego Terminado!</h2>
+            <p id="final-score"></p>
+            <button onclick="game.init(); document.getElementById('modal').classList.remove('show')">Jugar de Nuevo</button>
+        </div>
+    </div>
+
+<script>
+class ReversiGame {
+    constructor() {
+        this.boardSize = 8;
+        this.board = []; // 0: vacío, 1: negro (jugador), 2: blanco (IA)
+        this.currentPlayer = 1; // 1 empieza (Negras)
+        this.gameOver = false;
+        
+        this.boardEl = document.getElementById('board');
+        this.statusEl = document.getElementById('status');
+        this.scoreBlackEl = document.getElementById('score-black');
+        this.scoreWhiteEl = document.getElementById('score-white');
+        
+        // Direcciones para verificar capturas (N, NE, E, SE, S, SO, O, NO)
+        this.directions = [
+            [-1, 0], [-1, 1], [0, 1], [1, 1],
+            [1, 0], [1, -1], [0, -1], [-1, -1]
+        ];
+
+        // Pesos estratégicos para la IA (posicional)
+        // Las esquinas valen mucho, las casillas al lado de las esquinas son peligrosas
+        this.weights = [
+            [100, -20, 10,  5,  5, 10, -20, 100],
+            [-20, -50, -2, -2, -2, -2, -50, -20],
+            [ 10,  -2,  8,  1,  1,  8,  -2,  10],
+            [  5,  -2,  1,  0,  0,  1,  -2,   5],
+            [  5,  -2,  1,  0,  0,  1,  -2,   5],
+            [ 10,  -2,  8,  1,  1,  8,  -2,  10],
+            [-20, -50, -2, -2, -2, -2, -50, -20],
+            [100, -20, 10,  5,  5, 10, -20, 100]
+        ];
+
+        this.init();
+    }
+
+    init() {
+        // Tablero inicial estándar
+        this.board = Array(this.boardSize).fill().map(() => Array(this.boardSize).fill(0));
+        this.board[3][3] = 2; this.board[3][4] = 1;
+        this.board[4][3] = 1; this.board[4][4] = 2;
+        
+        this.currentPlayer = 1;
+        this.gameOver = false;
+        document.getElementById('modal').classList.remove('show');
+        
+        this.updateUI();
+        this.renderBoard();
+    }
+
+    renderBoard() {
+        this.boardEl.innerHTML = '';
+        const validMoves = this.getValidMoves(this.currentPlayer);
+
+        for (let r = 0; r < this.boardSize; r++) {
+            for (let c = 0; c < this.boardSize; c++) {
+                const cell = document.createElement('div');
+                cell.classList.add('cell');
+                cell.dataset.r = r;
+                cell.dataset.c = c;
+
+                // Dibujar ficha
+                if (this.board[r][c] !== 0) {
+                    const piece = document.createElement('div');
+                    piece.classList.add('piece');
+                    piece.classList.add(this.board[r][c] === 1 ? 'black' : 'white');
+                    cell.appendChild(piece);
+                }
+
+                // Mostrar movimientos válidos si es turno del jugador
+                if (!this.gameOver && this.currentPlayer === 1) {
+                    const isValid = validMoves.some(m => m.r === r && m.c === c);
+                    if (isValid) {
+                        cell.classList.add('valid-move');
+                        cell.addEventListener('click', () => this.handlePlayerMove(r, c));
+                    }
+                }
+
+                this.boardEl.appendChild(cell);
+            }
+        }
+    }
+
+    handlePlayerMove(r, c) {
+        if (this.gameOver || this.currentPlayer !== 1) return;
+        
+        const flips = this.getFlips(r, c, 1);
+        if (flips.length > 0) {
+            this.makeMove(r, c, 1, flips);
+            
+            // Turno de la IA
+            this.currentPlayer = 2;
+            this.updateUI();
+            
+            // Pequeño delay para que se vea la jugada antes de que responda la IA
+            setTimeout(() => this.aiTurn(), 600);
+        }
+    }
+
+    aiTurn() {
+        if (this.gameOver) return;
+
+        const validMoves = this.getValidMoves(2);
+        
+        if (validMoves.length === 0) {
+            // IA no tiene movimientos, pasa turno
+            this.statusEl.innerText = "IA no tiene movimientos. Tu turno.";
+            this.currentPlayer = 1;
+            if (this.getValidMoves(1).length === 0) {
+                this.endGame();
+            } else {
+                this.updateUI();
+                this.renderBoard();
+            }
+            return;
+        }
+
+        // IA Elige el mejor movimiento basado en pesos estratégicos + capturas
+        let bestMove = null;
+        let bestScore = -Infinity;
+
+        validMoves.forEach(move => {
+            // Puntuación base: peso posicional + número de fichas volteadas
+            const score = this.weights[move.r][move.c] + (move.flips.length * 2);
+            
+            if (score > bestScore) {
+                bestScore = score;
+                bestMove = move;
+            }
+        });
+
+        if (bestMove) {
+            this.makeMove(bestMove.r, bestMove.c, 2, bestMove.flips);
+            this.currentPlayer = 1;
+            
+            // Verificar si el jugador tiene movimientos
+            if (this.getValidMoves(1).length === 0) {
+                this.statusEl.innerText = "No tienes movimientos. Turno de la IA.";
+                this.currentPlayer = 2;
+                if (this.getValidMoves(2).length === 0) {
+                    this.endGame();
+                } else {
+                    setTimeout(() => this.aiTurn(), 1000);
+                }
+            } else {
+                this.updateUI();
+                this.renderBoard();
+            }
+        }
+    }
+
+    makeMove(r, c, player, flips) {
+        this.board[r][c] = player;
+        
+        // Voltear fichas con animación
+        flips.forEach(pos => {
+            this.board[pos.r][pos.c] = player;
+        });
+
+        this.updateScore();
+        this.renderBoard();
+        
+        // Aplicar clase de animación a las fichas volteadas
+        // (Se hace después de renderizar para encontrar los elementos)
+        flips.forEach(pos => {
+            const index = pos.r * 8 + pos.c;
+            const cell = this.boardEl.children[index];
+            const piece = cell.querySelector('.piece');
+            if (piece) piece.classList.add('flip');
+        });
+    }
+
+    getValidMoves(player) {
+        const moves = [];
+        for (let r = 0; r < this.boardSize; r++) {
+            for (let c = 0; c < this.boardSize; c++) {
+                if (this.board[r][c] === 0) {
+                    const flips = this.getFlips(r, c, player);
+                    if (flips.length > 0) {
+                        moves.push({ r, c, flips });
+                    }
+                }
+            }
+        }
+        return moves;
+    }
+
+    getFlips(r, c, player) {
+        const opponent = player === 1 ? 2 : 1;
+        const flips = [];
+
+        this.directions.forEach(([dr, dc]) => {
+            let nr = r + dr;
+            let nc = c + dc;
+            const potentialFlips = [];
+
+            // Buscar fichas oponentes en esta dirección
+            while (nr >= 0 && nr < this.boardSize && nc >= 0 && nc < this.boardSize && this.board[nr][nc] === opponent) {
+                potentialFlips.push({ r: nr, c: nc });
+                nr += dr;
+                nc += dc;
+            }
+
+            // Si terminamos en una ficha nuestra y capturamos al menos una
+            if (nr >= 0 && nr < this.boardSize && nc >= 0 && nc < this.boardSize && 
+                this.board[nr][nc] === player && potentialFlips.length > 0) {
+                flips.push(...potentialFlips);
+            }
+        });
+
+        return flips;
+    }
+
+    updateScore() {
+        let black = 0, white = 0;
+        for (let r = 0; r < this.boardSize; r++) {
+            for (let c = 0; c < this.boardSize; c++) {
+                if (this.board[r][c] === 1) black++;
+                else if (this.board[r][c] === 2) white++;
+            }
+        }
+        this.scoreBlackEl.innerText = black;
+        this.scoreWhiteEl.innerText = white;
+    }
+
+    updateUI() {
+        this.updateScore();
+        if (this.currentPlayer === 1) {
+            this.statusEl.innerText = "Tu turno (Negras)";
+            this.statusEl.style.color = "#212121";
+        } else {
+            this.statusEl.innerText = "IA pensando... (Blancas)";
+            this.statusEl.style.color = "#757575";
+        }
+    }
+
+    endGame() {
+        this.gameOver = true;
+        const black = parseInt(this.scoreBlackEl.innerText);
+        const white = parseInt(this.scoreWhiteEl.innerText);
+        
+        const modal = document.getElementById('modal');
+        const winnerText = document.getElementById('winner-text');
+        const finalScore = document.getElementById('final-score');
+        
+        let msg = "";
+        if (black > white) {
+            winnerText.innerText = "¡Ganaste!";
+            winnerText.style.color = "#2e7d32";
+            msg = `Has derrotado a la IA.`;
+        } else if (white > black) {
+            winnerText.innerText = "La IA Gana";
+            winnerText.style.color = "#c62828";
+            msg = `La máquina ha sido superior.`;
+        } else {
+            winnerText.innerText = "¡Empate!";
+            winnerText.style.color = "#f57f17";
+            msg = `Increíble, han empatado.`;
+        }
+        
+        finalScore.innerText = `${msg} (${black} - ${white})`;
+        modal.classList.add('show');
+    }
+}
+
+const game = new ReversiGame();
+</script>
+</body>
+</html>

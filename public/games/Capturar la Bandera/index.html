@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Captura la Bandera: Operación Sigilosa</title>
+    <style>
+        :root {
+            --bg: #1e272e;
+            --ui-bg: rgba(0, 0, 0, 0.7);
+            --blue: #0984e3;
+            --red: #d63031;
+            --green: #00b894;
+            --text: #dfe6e9;
+        }
+        body { margin: 0; overflow: hidden; background: var(--bg); font-family: 'Segoe UI', sans-serif; color: var(--text); user-select: none; }
+        canvas { display: block; }
+        
+        /* UI Overlay */
+        #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; display: flex; flex-direction: column; justify-content: space-between; padding: 20px; box-sizing: border-box; }
+        
+        .hud-top { display: flex; justify-content: space-between; align-items: flex-start; }
+        .score-board { background: var(--ui-bg); padding: 15px 30px; border-radius: 10px; text-align: center; border: 2px solid #555; }
+        .score-val { font-size: 2rem; font-weight: bold; }
+        .blue-score { color: var(--blue); }
+        .red-score { color: var(--red); }
+        
+        .status-msg { 
+            position: absolute; top: 20%; left: 50%; transform: translate(-50%, -50%);
+            font-size: 2rem; font-weight: bold; text-shadow: 0 2px 10px black;
+            opacity: 0; transition: opacity 0.3s; pointer-events: none;
+        }
+        .status-msg.active { opacity: 1; }
+
+        /* Pantallas */
+        .modal { position: absolute; inset: 0; background: rgba(0,0,0,0.85); display: flex; align-items: center; justify-content: center; z-index: 100; pointer-events: auto; backdrop-filter: blur(5px); }
+        .modal.hidden { display: none; }
+        .card { background: #2d3436; padding: 40px; border-radius: 15px; text-align: center; max-width: 500px; border: 1px solid #636e72; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+        h1 { margin: 0 0 10px; color: var(--green); text-transform: uppercase; letter-spacing: 2px; }
+        p { line-height: 1.6; color: #b2bec3; margin-bottom: 25px; }
+        .controls { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; text-align: left; font-size: 0.9rem; margin-bottom: 20px; background: rgba(0,0,0,0.2); padding: 15px; border-radius: 8px; }
+        kbd { background: #eee; color: #333; padding: 2px 6px; border-radius: 4px; font-weight: bold; font-family: monospace; }
+        button { background: var(--green); color: white; border: none; padding: 12px 30px; font-size: 1.2rem; font-weight: bold; border-radius: 8px; cursor: pointer; transition: transform 0.1s; }
+        button:hover { transform: scale(1.05); filter: brightness(1.1); }
+    </style>
+</head>
+<body>
+
+<canvas id="gameCanvas"></canvas>
+
+<div id="ui-layer">
+    <div class="hud-top">
+        <div class="score-board">
+            <div style="font-size:0.8rem; opacity:0.7;">EQUIPO AZUL (TÚ)</div>
+            <div class="score-val blue-score" id="scoreBlue">0</div>
+        </div>
+        <div class="score-board">
+            <div style="font-size:0.8rem; opacity:0.7;">EQUIPO ROJO (IA)</div>
+            <div class="score-val red-score" id="scoreRed">0</div>
+        </div>
+    </div>
+    <div id="msgCapture" class="status-msg" style="color: var(--green)">¡BANDERA CAPTURADA!</div>
+    <div id="msgCaught" class="status-msg" style="color: var(--red)">¡TE HAN ATRAPADO!</div>
+</div>
+
+<!-- Pantalla Inicio -->
+<div id="startScreen" class="modal">
+    <div class="card">
+        <h1>Captura la Bandera</h1>
+        <p>Infiltra la base enemiga, roba su bandera roja y llévala a tu base azul.</p>
+        <div class="controls">
+            <div><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> Moverse</div>
+            <div><kbd>SHIFT</kbd> Correr (Ruidoso)</div>
+            <div>🌲 Arbustos = Ocultarse</div>
+            <div>⚠️ Evita los conos de visión</div>
+        </div>
+        <button onclick="startGame()">INICIAR MISIÓN</button>
+    </div>
+</div>
+
+<script>
+/**
+ * CAPTURA LA BANDERA - ARCADE STEALTH
+ */
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+let W, H;
+
+// Configuración
+const CFG = {
+    tileSize: 40,
+    playerSpeed: 3,
+    runSpeed: 5,
+    enemySpeed: 2.2,
+    enemyChaseSpeed: 3.8,
+    viewDistance: 180,
+    fov: Math.PI / 3, // 60 grados
+    colors: {
+        grass: '#2d3436',
+        wall: '#636e72',
+        bush: '#00b894',
+        blueBase: 'rgba(9, 132, 227, 0.3)',
+        redBase: 'rgba(214, 48, 49, 0.3)'
+    }
+};
+
+// Estado del Juego
+const state = {
+    active: false,
+    score: { blue: 0, red: 0 },
+    map: [],
+    cols: 0, rows: 0,
+    entities: [],
+    particles: [],
+    flags: {
+        blue: { x: 0, y: 0, taken: false, carrier: null, homeX: 0, homeY: 0 },
+        red: { x: 0, y: 0, taken: false, carrier: null, homeX: 0, homeY: 0 }
+    }
+};
+
+// Input
+const keys = {};
+window.addEventListener('keydown', e => keys[e.code] = true);
+window.addEventListener('keyup', e => keys[e.code] = false);
+
+// Resize
+function resize() {
+    W = canvas.width = window.innerWidth;
+    H = canvas.height = window.innerHeight;
+}
+window.addEventListener('resize', resize);
+resize();
+
+// --- CLASES ---
+
+class Entity {
+    constructor(x, y, team) {
+        this.x = x;
+        this.y = y;
+        this.team = team; // 'blue' or 'red'
+        this.radius = 12;
+        this.angle = 0;
+        this.speed = 0;
+        this.state = 'patrol'; // patrol, chase, return
+        this.target = null;
+        this.stunTimer = 0;
+    }
+
+    update() {
+        if (this.stunTimer > 0) { this.stunTimer--; return; }
+
+        let moveSpeed = this.team === 'blue' ? 
+            (keys['ShiftLeft'] ? CFG.runSpeed : CFG.playerSpeed) : 
+            (this.state === 'chase' ? CFG.enemyChaseSpeed : CFG.enemySpeed);
+
+        // Lógica de Movimiento
+        let dx = 0, dy = 0;
+
+        if (this.team === 'blue') {
+            // Control Jugador
+            if (keys['KeyW'] || keys['ArrowUp']) dy = -1;
+            if (keys['KeyS'] || keys['ArrowDown']) dy = 1;
+            if (keys['KeyA'] || keys['ArrowLeft']) dx = -1;
+            if (keys['KeyD'] || keys['ArrowRight']) dx = 1;
+            
+            if (dx !== 0 || dy !== 0) {
+                this.angle = Math.atan2(dy, dx);
+                this.speed = moveSpeed;
+            } else {
+                this.speed = 0;
+            }
+        } else {
+            // IA Enemiga
+            this.aiLogic();
+        }
+
+        // Aplicar movimiento con colisión
+        if (this.speed > 0) {
+            const nextX = this.x + Math.cos(this.angle) * this.speed;
+            const nextY = this.y + Math.sin(this.angle) * this.speed;
+            
+            if (!isWall(nextX, this.y)) this.x = nextX;
+            if (!isWall(this.x, nextY)) this.y = nextY;
+        }
+
+        // Interacción con Banderas
+        this.checkFlags();
+    }
+
+    aiLogic() {
+        const player = state.entities.find(e => e.team === 'blue');
+        const distToPlayer = Math.hypot(player.x - this.x, player.y - this.y);
+        
+        // ¿Puede ver al jugador?
+        const canSee = distToPlayer < CFG.viewDistance && 
+                       isInFOV(this, player) && 
+                       hasLineOfSight(this.x, this.y, player.x, player.y);
+
+        // Máquina de estados simple
+        if (canSee && !isInBush(player.x, player.y)) {
+            this.state = 'chase';
+            this.target = player;
+        } else if (this.state === 'chase' && (!canSee || isInBush(player.x, player.y))) {
+            // Perdió de vista, volver a patrulla tras un momento
+            if (Math.random() < 0.02) this.state = 'patrol';
+        }
+
+        if (this.state === 'chase' && this.target) {
+            // Perseguir
+            this.angle = Math.atan2(this.target.y - this.y, this.target.x - this.x);
+            this.speed = CFG.enemyChaseSpeed;
+            
+            // Capturar
+            if (distToPlayer < this.radius + player.radius) {
+                respawnPlayer();
+            }
+        } else {
+            // Patrullar (movimiento aleatorio suave)
+            if (Math.random() < 0.02) {
+                this.angle += (Math.random() - 0.5) * 2;
+            }
+            // Mantenerse en zona roja (simple)
+            if (this.x < W/2) this.angle = 0; 
+            
+            this.speed = CFG.enemySpeed * 0.5;
+        }
+    }
+
+    checkFlags() {
+        // Bandera Enemiga (Roja para Azul, Azul para Rojo)
+        const enemyFlag = this.team === 'blue' ? state.flags.red : state.flags.blue;
+        const myFlag = this.team === 'blue' ? state.flags.blue : state.flags.red;
+        
+        const distToEnemyFlag = Math.hypot(this.x - enemyFlag.x, this.y - enemyFlag.y);
+        const distToMyBase = Math.hypot(this.x - myFlag.homeX, this.y - myFlag.homeY);
+
+        // Robar bandera
+        if (!enemyFlag.taken && distToEnemyFlag < 30) {
+            enemyFlag.taken = true;
+            enemyFlag.carrier = this;
+            showMessage(this.team === 'blue' ? 'msgCapture' : null);
+        }
+
+        // Llevar bandera
+        if (enemyFlag.carrier === this) {
+            enemyFlag.x = this.x;
+            enemyFlag.y = this.y;
+
+            // Capturar (llegar a base propia)
+            if (distToMyBase < 50) {
+                scorePoint(this.team);
+                resetFlags();
+            }
+        }
+    }
+
+    draw(ctx) {
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        ctx.rotate(this.angle);
+
+        // Cono de visión (solo enemigos o jugador si se quiere)
+        if (this.team === 'red') {
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+            ctx.beginPath();
+            ctx.moveTo(0, 0);
+            ctx.arc(0, 0, CFG.viewDistance, -CFG.fov/2, CFG.fov/2);
+            ctx.closePath();
+            ctx.fill();
+        }
+
+        // Cuerpo
+        ctx.fillStyle = this.team === 'blue' ? '#0984e3' : '#d63031';
+        ctx.beginPath();
+        ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Indicador de dirección
+        ctx.fillStyle = 'rgba(255,255,255,0.5)';
+        ctx.fillRect(0, -2, this.radius + 5, 4);
+
+        // Indicador de bandera cargada
+        if ((this.team === 'blue' && state.flags.red.carrier === this) ||
+            (this.team === 'red' && state.flags.blue.carrier === this)) {
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(0, 0, this.radius + 4, 0, Math.PI * 2);
+            ctx.stroke();
+        }
+
+        ctx.restore();
+    }
+}
+
+// --- UTILIDADES MAPA ---
+
+function generateMap() {
+    state.cols = Math.ceil(W / CFG.tileSize);
+    state.rows = Math.ceil(H / CFG.tileSize);
+    state.map = [];
+    state.entities = [];
+
+    // Generar mapa simétrico
+    for (let y = 0; y < state.rows; y++) {
+        const row = [];
+        for (let x = 0; x < state.cols; x++) {
+            let type = 'grass';
+            
+            // Bordes son muros
+            if (x === 0 || x === state.cols - 1 || y === 0 || y === state.rows - 1) {
+                type = 'wall';
+            } 
+            // Obstáculos aleatorios simétricos
+            else if (Math.random() < 0.1) {
+                type = Math.random() > 0.5 ? 'wall' : 'bush';
+            }
+            
+            row.push(type);
+            
+            // Espejo para simetría
+            if (x < state.cols / 2) {
+                // Se llenará en el siguiente paso o simplemente copiamos
+            }
+        }
+        state.map.push(row);
+    }
+
+    // Forzar simetría perfecta
+    for (let y = 1; y < state.rows - 1; y++) {
+        for (let x = 1; x < Math.floor(state.cols / 2); x++) {
+            state.map[y][state.cols - 1 - x] = state.map[y][x];
+        }
+    }
+
+    // Limpiar bases
+    clearArea(2, 2, 4, 4); // Base Azul
+    clearArea(state.cols - 6, 2, 4, 4); // Base Roja
+    clearArea(Math.floor(state.cols/2)-2, Math.floor(state.rows/2)-2, 4, 4); // Centro
+
+    // Posicionar Banderas
+    state.flags.blue = { 
+        x: 3 * CFG.tileSize, y: 3 * CFG.tileSize, 
+        homeX: 3 * CFG.tileSize, homeY: 3 * CFG.tileSize, 
+        taken: false, carrier: null 
+    };
+    state.flags.red = { 
+        x: (state.cols - 4) * CFG.tileSize, y: 3 * CFG.tileSize, 
+        homeX: (state.cols - 4) * CFG.tileSize, homeY: 3 * CFG.tileSize, 
+        taken: false, carrier: null 
+    };
+
+    // Crear Jugador
+    state.entities.push(new Entity(3 * CFG.tileSize, 4 * CFG.tileSize, 'blue'));
+
+    // Crear Enemigos
+    for(let i=0; i<3; i++) {
+        state.entities.push(new Entity((state.cols - 5) * CFG.tileSize, (3 + i*3) * CFG.tileSize, 'red'));
+    }
+}
+
+function clearArea(gx, gy, w, h) {
+    for(let y=gy; y<gy+h; y++) {
+        for(let x=gx; x<gx+w; x++) {
+            if(y < state.rows && x < state.cols) state.map[y][x] = 'grass';
+        }
+    }
+}
+
+function isWall(x, y) {
+    const gx = Math.floor(x / CFG.tileSize);
+    const gy = Math.floor(y / CFG.tileSize);
+    if (gy < 0 || gy >= state.rows || gx < 0 || gx >= state.cols) return true;
+    return state.map[gy][gx] === 'wall';
+}
+
+function isInBush(x, y) {
+    const gx = Math.floor(x / CFG.tileSize);
+    const gy = Math.floor(y / CFG.tileSize);
+    if (gy < 0 || gy >= state.rows || gx < 0 || gx >= state.cols) return false;
+    return state.map[gy][gx] === 'bush';
+}
+
+function isInFOV(viewer, target) {
+    const dx = target.x - viewer.x;
+    const dy = target.y - viewer.y;
+    const angleToTarget = Math.atan2(dy, dx);
+    let angleDiff = angleToTarget - viewer.angle;
+    
+    // Normalizar ángulo
+    while (angleDiff <= -Math.PI) angleDiff += Math.PI*2;
+    while (angleDiff > Math.PI) angleDiff -= Math.PI*2;
+    
+    return Math.abs(angleDiff) < CFG.fov / 2;
+}
+
+function hasLineOfSight(x1, y1, x2, y2) {
+    const dist = Math.hypot(x2-x1, y2-y1);
+    const steps = Math.ceil(dist / (CFG.tileSize/2));
+    for(let i=1; i<steps; i++) {
+        const t = i/steps;
+        const cx = x1 + (x2-x1)*t;
+        const cy = y1 + (y2-y1)*t;
+        if (isWall(cx, cy)) return false;
+    }
+    return true;
+}
+
+// --- LÓGICA JUEGO ---
+
+function startGame() {
+    document.getElementById('startScreen').classList.add('hidden');
+    state.score = { blue: 0, red: 0 };
+    updateScoreUI();
+    generateMap();
+    state.active = true;
+    loop();
+}
+
+function respawnPlayer() {
+    const p = state.entities.find(e => e.team === 'blue');
+    p.x = 3 * CFG.tileSize;
+    p.y = 4 * CFG.tileSize;
+    p.stunTimer = 60; // 1 segundo de invulnerabilidad
+    
+    // Soltar bandera si la tenía
+    if (state.flags.red.carrier === p) {
+        state.flags.red.taken = false;
+        state.flags.red.carrier = null;
+        state.flags.red.x = state.flags.red.homeX;
+        state.flags.red.y = state.flags.red.homeY;
+    }
+
+    showMessage('msgCaught');
+}
+
+function scorePoint(team) {
+    state.score[team]++;
+    updateScoreUI();
+    if (team === 'blue') showMessage('msgCapture');
+}
+
+function resetFlags() {
+    state.flags.blue.x = state.flags.blue.homeX;
+    state.flags.blue.y = state.flags.blue.homeY;
+    state.flags.blue.taken = false;
+    state.flags.blue.carrier = null;
+    
+    state.flags.red.x = state.flags.red.homeX;
+    state.flags.red.y = state.flags.red.homeY;
+    state.flags.red.taken = false;
+    state.flags.red.carrier = null;
+}
+
+function showMessage(id) {
+    if(!id) return;
+    const el = document.getElementById(id);
+    el.classList.add('active');
+    setTimeout(() => el.classList.remove('active'), 2000);
+}
+
+function updateScoreUI() {
+    document.getElementById('scoreBlue').innerText = state.score.blue;
+    document.getElementById('scoreRed').innerText = state.score.red;
+}
+
+// --- RENDER & LOOP ---
+
+function drawMap() {
+    for (let y = 0; y < state.rows; y++) {
+        for (let x = 0; x < state.cols; x++) {
+            const tile = state.map[y][x];
+            const px = x * CFG.tileSize;
+            const py = y * CFG.tileSize;
+
+            if (tile === 'grass') {
+                ctx.fillStyle = CFG.colors.grass;
+                ctx.fillRect(px, py, CFG.tileSize, CFG.tileSize);
+            } else if (tile === 'wall') {
+                ctx.fillStyle = CFG.colors.wall;
+                ctx.fillRect(px, py, CFG.tileSize, CFG.tileSize);
+                // Detalle 3D falso
+                ctx.fillStyle = 'rgba(0,0,0,0.2)';
+                ctx.fillRect(px, py + CFG.tileSize - 5, CFG.tileSize, 5);
+            } else if (tile === 'bush') {
+                ctx.fillStyle = CFG.colors.grass;
+                ctx.fillRect(px, py, CFG.tileSize, CFG.tileSize);
+                ctx.fillStyle = CFG.colors.bush;
+                ctx.globalAlpha = 0.8;
+                ctx.beginPath();
+                ctx.arc(px + CFG.tileSize/2, py + CFG.tileSize/2, CFG.tileSize/2 - 2, 0, Math.PI*2);
+                ctx.fill();
+                ctx.globalAlpha = 1;
+            }
+        }
+    }
+
+    // Dibujar Zonas de Base
+    ctx.fillStyle = CFG.colors.blueBase;
+    ctx.fillRect(CFG.tileSize, CFG.tileSize, CFG.tileSize * 5, CFG.tileSize * 5);
+    
+    ctx.fillStyle = CFG.colors.redBase;
+    ctx.fillRect(W - CFG.tileSize * 6, CFG.tileSize, CFG.tileSize * 5, CFG.tileSize * 5);
+}
+
+function drawFlags() {
+    const drawFlag = (flag, color) => {
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.moveTo(flag.x, flag.y - 20);
+        ctx.lineTo(flag.x + 15, flag.y - 12);
+        ctx.lineTo(flag.x, flag.y - 5);
+        ctx.fill();
+        
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(flag.x, flag.y);
+        ctx.lineTo(flag.x, flag.y - 20);
+        ctx.stroke();
+        
+        // Brillo si está en casa
+        if (!flag.taken) {
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.arc(flag.x, flag.y, 15 + Math.sin(Date.now()/200)*3, 0, Math.PI*2);
+            ctx.stroke();
+        }
+    };
+
+    if (!state.flags.blue.carrier) drawFlag(state.flags.blue, '#0984e3');
+    if (!state.flags.red.carrier) drawFlag(state.flags.red, '#d63031');
+}
+
+function loop() {
+    if (!state.active) return;
+
+    // Update
+    state.entities.forEach(e => e.update());
+
+    // Draw
+    ctx.clearRect(0, 0, W, H);
+    drawMap();
+    drawFlags();
+    
+    // Dibujar entidades (ordenado por Y para pseudo-3D)
+    state.entities.sort((a,b) => a.y - b.y);
+    state.entities.forEach(e => e.draw(ctx));
+
+    // Oscurecer arbustos sobre el jugador si está dentro
+    const p = state.entities.find(e => e.team === 'blue');
+    if (isInBush(p.x, p.y)) {
+        // Efecto visual sutil de ocultamiento ya manejado por alpha del arbusto
+    }
+
+    requestAnimationFrame(loop);
+}
+
+</script>
+</body>
+</html>

@@ -1,0 +1,107 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    user-select: none;
+}
+
+body {
+    background: #050510;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    font-family: 'Courier New', monospace;
+    overflow: hidden;
+}
+
+.contenedor {
+    text-align: center;
+    width: 100%;
+    max-width: 850px;
+    padding: 10px;
+}
+
+header {
+    margin-bottom: 10px;
+}
+
+h1 {
+    font-size: 2.5em;
+    color: #00ffff;
+    text-shadow: 0 0 15px #00ffff, 0 0 30px #00ffff;
+    letter-spacing: 5px;
+    animation: pulsar 1.5s ease-in-out infinite;
+}
+
+@keyframes pulsar {
+    0%, 100% { text-shadow: 0 0 15px #00ffff, 0 0 30px #00ffff; }
+    50% { text-shadow: 0 0 25px #00ffff, 0 0 50px #00ffff, 0 0 70px #00ffff; }
+}
+
+.subtitulo {
+    color: #888;
+    font-size: 0.9em;
+    letter-spacing: 2px;
+}
+
+.panel-superior {
+    display: flex;
+    justify-content: center;
+    gap: 30px;
+    margin-bottom: 15px;
+}
+
+.score-box {
+    background: rgba(0, 255, 255, 0.1);
+    border: 2px solid #00ffff;
+    border-radius: 8px;
+    padding: 8px 25px;
+    min-width: 120px;
+    box-shadow: 0 0 15px rgba(0, 255, 255, 0.2);
+}
+
+.score-label {
+    display: block;
+    font-size: 0.7em;
+    color: #00ffff;
+    letter-spacing: 2px;
+    font-weight: bold;
+}
+
+.score-value {
+    display: block;
+    font-size: 1.8em;
+    font-weight: bold;
+    color: #fff;
+    text-shadow: 0 0 10px #fff;
+}
+
+canvas {
+    display: block;
+    border: 3px solid #ff00ff;
+    border-radius: 10px;
+    box-shadow: 0 0 30px rgba(255, 0, 255, 0.4);
+    background: #0a0a1a;
+    margin: 0 auto;
+    max-width: 100%;
+    cursor: pointer;
+}
+
+.controles-info {
+    margin-top: 15px;
+    color: #888;
+    font-size: 0.9em;
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+}
+
+.key {
+    background: rgba(255, 0, 255, 0.2);
+    border: 1px solid #ff00ff;
+    color: #ff00ff;
+    padding: 4px 12px;
+    border-radius: 5px;
+    font-weight: bold;
+}

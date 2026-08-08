@@ -1,0 +1,141 @@
+@import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;700&display=swap');
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+    background: #030308;
+    overflow: hidden;
+    font-family: 'Rajdhani', sans-serif;
+    color: #fff;
+    user-select: none;
+}
+
+.game-wrapper {
+    position: relative;
+    width: 100vw;
+    height: 100vh;
+}
+
+.hud {
+    position: absolute;
+    top: 20px; left: 0; right: 0;
+    display: flex;
+    justify-content: space-between;
+    padding: 0 30px;
+    z-index: 10;
+    pointer-events: none;
+}
+
+.score-box, .frenzy-box {
+    text-align: center;
+    background: rgba(255,255,255,0.03);
+    padding: 8px 20px;
+    border-radius: 20px;
+    border: 1px solid rgba(255,255,255,0.1);
+    backdrop-filter: blur(5px);
+}
+
+.label {
+    display: block;
+    font-size: 10px;
+    letter-spacing: 3px;
+    color: #666;
+    margin-bottom: 4px;
+}
+
+.value {
+    font-size: 24px;
+    font-weight: 700;
+    text-shadow: 0 0 10px currentColor;
+}
+
+#score { color: #0ff; }
+
+.bar-container {
+    width: 120px; height: 6px;
+    background: #1a1a1a;
+    border-radius: 3px;
+    overflow: hidden;
+    margin-top: 6px;
+}
+
+.bar {
+    height: 100%; width: 0%;
+    background: linear-gradient(90deg, #ff0, #f0f);
+    box-shadow: 0 0 10px #ff0;
+    transition: width 0.1s;
+}
+
+canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+    cursor: none;
+}
+
+.overlay {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(3,3,8,0.92);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    z-index: 20;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.4s ease;
+    backdrop-filter: blur(10px);
+}
+
+.overlay.active {
+    opacity: 1;
+    pointer-events: all;
+}
+
+#overlay-title {
+    font-size: 56px;
+    letter-spacing: 6px;
+    margin-bottom: 10px;
+    background: linear-gradient(135deg, #0ff, #f0f);
+    background-clip: text;                    /* ← AÑADIR ESTA LÍNEA */
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    filter: drop-shadow(0 0 20px rgba(0,255,255,0.5));
+}
+
+#overlay-subtitle {
+    font-size: 14px;
+    color: #888;
+    letter-spacing: 2px;
+    margin-bottom: 35px;
+}
+
+#start-btn {
+    background: transparent;
+    border: 2px solid #0ff;
+    color: #0ff;
+    padding: 14px 45px;
+    font-family: inherit;
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: 4px;
+    cursor: pointer;
+    border-radius: 50px;
+    transition: all 0.3s;
+    box-shadow: 0 0 20px rgba(0,255,255,0.2);
+}
+
+#start-btn:hover {
+    background: #0ff;
+    color: #000;
+    box-shadow: 0 0 40px rgba(0,255,255,0.6);
+    transform: scale(1.05);
+}
+
+.controls-hint {
+    margin-top: 25px;
+    font-size: 11px;
+    color: #444;
+    letter-spacing: 1px;
+}

@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gato Ninja</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="contenedor">
+        <header>
+            <h1>🐱 GATO NINJA</h1>
+            <p class="subtitulo">¡Atrapa los peces, evita las bombas!</p>
+        </header>
+        
+        <div class="panel-superior">
+            <div class="score-box azul">
+                <span class="score-label">PECES</span>
+                <span class="score-value" id="peces">0</span>
+            </div>
+            <div class="score-box rojo">
+                <span class="score-label">VIDAS</span>
+                <span class="score-value" id="vidas">❤️❤️❤️</span>
+            </div>
+            <div class="score-box verde">
+                <span class="score-label">RÉCORD</span>
+                <span class="score-value" id="record">0</span>
+            </div>
+        </div>
+        
+        <canvas id="gameCanvas" width="600" height="500"></canvas>
+        
+        <div class="controles-info">
+            <span class="key">←→</span> Mover
+            <span class="key">CLICK/TOUCH</span> Saltar
+        </div>
+    </div>
+    
+    <script src="script.js"></script>
+</body>
+</html>

@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Moto Neón</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <div class="game-wrapper">
+        <h1 class="title">🏍️ Moto Neón</h1>
+
+        <!-- Marcador -->
+        <div class="score-panel">
+            <div class="score-box">
+                <span class="label">Distancia</span>
+                <span id="score">0</span>
+            </div>
+            <div class="score-box">
+                <span class="label">Velocidad</span>
+                <span id="speed-display">0 km/h</span>
+            </div>
+            <div class="score-box">
+                <span class="label">Récord</span>
+                <span id="high-score">0</span>
+            </div>
+        </div>
+
+        <!-- Área de juego -->
+        <div id="canvas-container">
+            <canvas id="game-canvas" width="400" height="600"></canvas>
+
+            <!-- Pantalla de Inicio -->
+            <div id="start-screen" class="overlay">
+                <h2>🏍️ ¡A rodar!</h2>
+                <p>Esquiva el tráfico cambiando de carril.</p>
+                <p>⬅️ ➡️ Flechas / A D<br>📱 Toca los lados o los botones</p>
+                <button id="start-btn">🔥 Arrancar</button>
+            </div>
+
+            <!-- Pantalla de Game Over -->
+            <div id="game-over-screen" class="overlay hidden">
+                <h2 class="red">💥 ¡Choque!</h2>
+                <p>Distancia: <span id="final-score">0</span> m</p>
+                <p id="new-record" class="hidden gold">🏆 ¡Nuevo récord!</p>
+                <button id="restart-btn">🔄 Reintentar</button>
+            </div>
+        </div>
+
+        <!-- Controles táctiles -->
+        <div class="touch-controls">
+            <button id="btn-left" class="ctrl-btn">⬅️</button>
+            <button id="btn-right" class="ctrl-btn">➡️</button>
+        </div>
+
+        <p class="instruction">Cambia de carril para esquivar el tráfico</p>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
